@@ -11,13 +11,13 @@ typedef struct _wall
 
 typedef struct _sector
 {
-    int id;
+    uint32_t id;
     wall_t *walls;
     uint32_t walls_count;
     float z_floor, z_ceil;
 } sector_t;
 
-bool r_init();
+bool r_init(uint16_t scrn_w, uint16_t scrn_h);
 
 void r_begin_draw();
 void r_end_draw();

@@ -10,4 +10,15 @@ typedef struct _vec2i
     int x, y;
 } vec2i_t;
 
+typedef struct _vec2f
+{
+    float x, y;
+} vec2f_t;
+
+typedef struct _vec3f
+{
+    float x, y, z;
+} vec3f_t;
+
+
 #endif
