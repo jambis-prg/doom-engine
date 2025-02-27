@@ -17,7 +17,7 @@ bool g_init(uint16_t scrn_w, uint16_t scrn_h)
     if (!w_init(scrn_w, scrn_h))
         return false;
 
-    if (!r_init())
+    if (!r_init(scrn_w, scrn_h))
         return false;
 
     return true;
