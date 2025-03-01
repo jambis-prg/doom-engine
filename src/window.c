@@ -1,4 +1,5 @@
 #include "window.h"
+#include <SDL2/SDL.h>
 
 static SDL_Window *window = NULL;
 
@@ -11,7 +12,7 @@ bool w_init(uint16_t scrn_w, uint16_t scrn_h)
         "Doom", 
         SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 
         scrn_w, scrn_h, 
-        SDL_WINDOW_SHOW
+        SDL_WINDOW_SHOWN
     );
 
     if (window == NULL)

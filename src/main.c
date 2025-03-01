@@ -1,8 +1,8 @@
-#include "game_core.h"
+#include "core/game_core.h"
 
 int main()
 {
-    if (g_init(1920, 1080))
+    if (g_init(1024, 1024))
     {
         g_run();
 

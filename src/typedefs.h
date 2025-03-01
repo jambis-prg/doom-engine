@@ -5,6 +5,11 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#define PI 3.14159265359f
+#define TAU (2.0f * PI)
+#define PI_2 (PI / 2.0f)
+#define PI_4 (PI / 4.0f)
+
 typedef struct _vec2i
 {
     int x, y;

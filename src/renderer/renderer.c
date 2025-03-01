@@ -2,13 +2,11 @@
 #include "window.h"
 #include <math.h>
 
-#define PI 3.14159265359f
-#define TAU (2.0f * PI)
-#define PI_2 (PI / 2.0f)
-#define PI_4 (PI / 4.0f)
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_render.h>
 
 #define EYE_Z 1.65f
-#define HFOV DEG2RAD(90.0f)
+#define HFOV PI/2
 #define VFOV 0.5f
 #define ZNEAR 0.0001f
 #define ZFAR  128.0f
@@ -19,6 +17,8 @@ static uint32_t *screen_buffer = NULL;
 static uint32_t screen_buffer_size = 0;
 static uint16_t scrnw = 0, scrnh = 0;
 static vec2f_t zdl, zdr, near_left, near_right, far_left, far_right;
+static vec3f_t camera_pos;
+static float camera_angle_cos, camera_angle_sin;
 
 static bool r_init_screen(uint16_t scrn_w, uint16_t scrn_h)
 {
@@ -27,7 +27,8 @@ static bool r_init_screen(uint16_t scrn_w, uint16_t scrn_h)
 
     if (screen_buffer != NULL)
     {
-        screen_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACESS_STREAMING, scrn_w, scrn_h);
+        SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
+        screen_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, scrn_w, scrn_h);
         memset(screen_buffer, 0, screen_buffer_size);
         
         if (screen_texture != NULL)
@@ -78,12 +79,12 @@ static float r_normalize_angle(float angle)
 }
 
 // world space -> camera space (translate and rotate)
-static vec2f_t r_world_pos_to_camera(vec2f_t p) 
+static vec2f_t r_world_pos_to_camera(vec2f_t point) 
 {
-    const vec2f_t u = { p.x - state.camera.pos.x, p.y - state.camera.pos.y };
+    const vec2f_t u = { point.x - camera_pos.x, point.y - camera_pos.y };
     return (vec2f_t) {
-        u.x * state.camera.anglesin - u.y * state.camera.anglecos,
-        u.x * state.camera.anglecos + u.y * state.camera.anglesin,
+        u.x * camera_angle_cos - u.y * camera_angle_sin,
+        u.x * camera_angle_sin + u.y * camera_angle_cos,
     };
 }
 
@@ -101,12 +102,81 @@ static uint32_t abgr_mul(uint32_t col, uint32_t alpha)
     return 0xFF000000 | (br & 0xFF00FF) | (g & 0x00FF00);
 }
 
+static void r_clip_behind_player(vec2f_t *a, float *z0, vec2f_t b, float z1)
+{
+    float distance_plane_a = a->y;
+    float distance_plane_b = b.y;
+    float d = distance_plane_a - distance_plane_b;
+    if (d == 0) d = 1;
+    float s = distance_plane_a / (distance_plane_a - distance_plane_b);
+    a->x = a->x + s * (b.x - a->x);
+    a->y = a->y + s * (b.y - a->y);
+    if (a->y == 0) a->y = 1;
+
+    *z0 = *z0 + s * (z1 - (*z0));
+}
+
 static void r_draw_wall(sector_t *sector, wall_t *wall)
 {
-    // translate relative to player and rotate points around player's view
-    const vec2f_t op0 = r_world_pos_to_camera(v2i_to_v2f(wall->a));
-    const vec2f_t op1 = r_world_pos_to_camera(v2i_to_v2f(wall->b));
+    // Transformando as posições do mundo em relação ao player
+    vec2f_t op0 = r_world_pos_to_camera(v2i_to_v2f(wall->a));
+    vec2f_t op1 = r_world_pos_to_camera(v2i_to_v2f(wall->b));
+    vec2f_t op2 = op0;
+    vec2f_t op3 = op1;
+    float z0 = 0 - camera_pos.z;
+    float z1 = 0 - camera_pos.z;
+    float z2 = z0 - 5;
+    float z3 = z1 - 5;
+    
+    op0 = (vec2f_t){op0.x * 200/op0.y + scrnw/2, z0*200/op0.y + scrnh/2};
+    op1 = (vec2f_t){op1.x * 200/op1.y + scrnw/2, z1*200/op1.y + scrnh/2};
+    op2 = (vec2f_t){op2.x * 200/op2.y + scrnw/2, z2*200/op2.y + scrnh/2};
+    op3 = (vec2f_t){op3.x * 200/op3.y + scrnw/2, z3*200/op3.y + scrnh/2};
+    
+    if (op0.y < 1 && op1.y < 1) return;
 
+    if (op0.y < 1)
+    {
+        r_clip_behind_player(&op0, &z0, op1, z1);
+        r_clip_behind_player(&op2, &z2, op3, z3);
+    }
+
+    if (op1.y < 1)
+    {
+        r_clip_behind_player(&op1, &z1, op0, z0);
+        r_clip_behind_player(&op3, &z3, op2, z2);
+    }
+
+    int dy_bottom = op1.y - op0.y;
+    int dy_top = op3.y - op2.y;
+    int dx = op1.x - op0.x;
+    if (dx == 0) dx = 1;
+
+    int xs = op0.x;
+
+    if (op0.x < 1) op0.x = 1;
+    if (op1.x < 1) op1.x = 1;
+    if (op0.x > scrnw - 1) op0.x = scrnw - 1;
+    if (op1.x > scrnw - 1) op1.x = scrnw - 1;
+
+    for (int x = op0.x; x < op1.x; x++)
+    {
+        int y1 = dy_bottom * (x - xs + 0.5) / dx + op0.y;
+        int y2 = dy_top * (x - xs + 0.5) / dx + op2.y;
+
+        if (y1 < 1) y1 = 1;
+        if (y2 < 1) y2 = 1;
+        if (y1 > scrnh - 1) y1 = scrnh - 1;
+        if (y2 > scrnh - 1) y2 = scrnh - 1;
+
+        for (int y = y1; y < y2; y++)
+            screen_buffer[scrnw * y + x] = 0xFF0000FF;
+    }
+
+    //if (op0.x > 0 && op0.x < scrnw && op0.y > 0 && op0.y < scrnh) r_verline(op0.x, op0.y, op0.y, 0xFF0000FF);
+    //if (op1.x > 0 && op1.x < scrnw && op1.y > 0 && op1.y < scrnh) r_verline(op1.x, op1.y, op1.y, 0xFF0000FF);
+
+    /*
     // wall clipped pos
     vec2f_t cp0 = op0, cp1 = op1;
 
@@ -147,83 +217,84 @@ static void r_draw_wall(sector_t *sector, wall_t *wall)
 
     // bounds check against portal window
     if (tx0 > entry.x1 || tx1 < entry.x0) { return; }
-
+    
     const int wallshade =
-        16 * (sin(atan2f(
-            wall->b.x - wall->a.x,
-            wall->b.y - wall->b.y)) + 1.0f);
-
-    const int
+    16 * (sin(atan2f(
+        wall->b.x - wall->a.x,
+        wall->b.y - wall->b.y)) + 1.0f);
+        
+        const int
         x0 = clamp(tx0, entry.x0, entry.x1),
         x1 = clamp(tx1, entry.x0, entry.x1);
-
-    const float
+        
+        const float
         z_floor = sector->z_floor,
         z_ceil = sector->z_ceil,
         nz_floor = wall->is_portal ? state.sectors.arr[wall->portal].z_floor : 0,
         nz_ceil = wall->is_portal ? state.sectors.arr[wall->portal].z_ceil : 0;
-
+        
     const float
-        sy0 = ifnan((VFOV * scrnh) / cp0.y, 1e10),
-        sy1 = ifnan((VFOV * scrnh) / cp1.y, 1e10);
-
+    sy0 = ifnan((VFOV * scrnh) / cp0.y, 1e10),
+    sy1 = ifnan((VFOV * scrnh) / cp1.y, 1e10);
+    
     const int
-        yf0  = (scrnh / 2) + (int) (( z_floor - EYE_Z) * sy0),
-        yc0  = (scrnh / 2) + (int) (( z_ceil  - EYE_Z) * sy0),
-        yf1  = (scrnh / 2) + (int) (( z_floor - EYE_Z) * sy1),
-        yc1  = (scrnh / 2) + (int) (( z_ceil  - EYE_Z) * sy1),
-        nyf0 = (scrnh / 2) + (int) ((nz_floor - EYE_Z) * sy0),
-        nyc0 = (scrnh / 2) + (int) ((nz_ceil  - EYE_Z) * sy0),
-        nyf1 = (scrnh / 2) + (int) ((nz_floor - EYE_Z) * sy1),
-        nyc1 = (scrnh / 2) + (int) ((nz_ceil  - EYE_Z) * sy1),
-        txd = tx1 - tx0,
-        yfd = yf1 - yf0,
-        ycd = yc1 - yc0,
-        nyfd = nyf1 - nyf0,
-        nycd = nyc1 - nyc0;
-
+    yf0  = (scrnh / 2) + (int) (( z_floor - EYE_Z) * sy0),
+    yc0  = (scrnh / 2) + (int) (( z_ceil  - EYE_Z) * sy0),
+    yf1  = (scrnh / 2) + (int) (( z_floor - EYE_Z) * sy1),
+    yc1  = (scrnh / 2) + (int) (( z_ceil  - EYE_Z) * sy1),
+    nyf0 = (scrnh / 2) + (int) ((nz_floor - EYE_Z) * sy0),
+    nyc0 = (scrnh / 2) + (int) ((nz_ceil  - EYE_Z) * sy0),
+    nyf1 = (scrnh / 2) + (int) ((nz_floor - EYE_Z) * sy1),
+    nyc1 = (scrnh / 2) + (int) ((nz_ceil  - EYE_Z) * sy1),
+    txd = tx1 - tx0,
+    yfd = yf1 - yf0,
+    ycd = yc1 - yc0,
+    nyfd = nyf1 - nyf0,
+    nycd = nyc1 - nyc0;
+    
     for (int x = x0; x <= x1; x++) 
     {
         int shade = x == x0 || x == x1 ? 192 : (255 - wallshade);
-
+        
         // calculate progress along x-axis via tx{0,1} so that walls
         // which are partially cut off due to portal edges still have
         // proper heights
         const float xp = ifnan((x - tx0) / (float) txd, 0);
-
+        
         // get y coordinates for this x
         const int
-            tyf = (int) (xp * yfd) + yf0,
-            tyc = (int) (xp * ycd) + yc0,
-            yf = clamp(tyf, state.y_lo[x], state.y_hi[x]),
-            yc = clamp(tyc, state.y_lo[x], state.y_hi[x]);
-
+        tyf = (int) (xp * yfd) + yf0,
+        tyc = (int) (xp * ycd) + yc0,
+        yf = clamp(tyf, state.y_lo[x], state.y_hi[x]),
+        yc = clamp(tyc, state.y_lo[x], state.y_hi[x]);
+        
         // floor
         if (yf > state.y_lo[x])
-            verline(x, state.y_lo[x], yf, 0xFFFF0000);
+        verline(x, state.y_lo[x], yf, 0xFFFF0000);
         // ceiling
         if (yc < state.y_hi[x])
-            verline(x, yc, state.y_hi[x], 0xFF00FFFF);
+        verline(x, yc, state.y_hi[x], 0xFF00FFFF);
 
         if (wall->is_portal) 
         {
             const int
-                tnyf = (int) (xp * nyfd) + nyf0,
-                tnyc = (int) (xp * nycd) + nyc0,
-                nyf = clamp(tnyf, state.y_lo[x], state.y_hi[x]),
-                nyc = clamp(tnyc, state.y_lo[x], state.y_hi[x]);
-
+            tnyf = (int) (xp * nyfd) + nyf0,
+            tnyc = (int) (xp * nycd) + nyc0,
+            nyf = clamp(tnyf, state.y_lo[x], state.y_hi[x]),
+            nyc = clamp(tnyc, state.y_lo[x], state.y_hi[x]);
+            
             verline(x, nyc, yc, abgr_mul(0xFF00FF00, shade));
-
+            
             verline(x, yf, nyf, abgr_mul(0xFF0000FF, shade));
-
+            
             state.y_hi[x] = clamp(min(min(yc, nyc), state.y_hi[x]), 0, scrnh - 1);
-
+            
             state.y_lo[x] = clamp(max(max(yf, nyf), state.y_lo[x]), 0, scrnh - 1);
         } 
         else 
-            verline(x, yf, yc, abgr_mul(0xFFD0D0D0, shade));
+        verline(x, yf, yc, abgr_mul(0xFFD0D0D0, shade));
     }
+    */
 }
 
 bool r_init(uint16_t scrn_w, uint16_t scrn_h)
@@ -232,7 +303,7 @@ bool r_init(uint16_t scrn_w, uint16_t scrn_h)
     scrnw = scrn_w;
     scrnh = scrn_h;
 
-    renderer = SDL_CreateRenderer(win, 0, SDL_RENDERER_ACCELERATED);
+    renderer = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_SOFTWARE);
 
     if (renderer == NULL)
         return false;
@@ -255,16 +326,20 @@ bool r_init(uint16_t scrn_w, uint16_t scrn_h)
     return true;
 }
 
-void r_begin_draw()
+void r_begin_draw(const player_t *player)
 {
     memset(screen_buffer, 0, screen_buffer_size);
+
+    camera_pos = (vec3f_t){ player->position.x, player->position.y, player->position.z };
+    camera_angle_cos = player->angle_cos;
+    camera_angle_sin = player->angle_sin;
 }
 
 void r_draw_sectors(sector_t *sectors, wall_t *walls, queue_sector_t *queue)
 {
-    for (uint32_t i = queue->head; i != queue->tail; i = (i + 1) % queue->n) 
+    for (uint32_t i = 0; i < queue->size; i++) 
     {
-        uint32_t id = queue->arr[i];
+        uint32_t id = queue->arr[(queue->front + i) % MAX_QUEUE];
 
         for (uint32_t j = 0; j < sectors[id].num_walls; j++) 
             r_draw_wall(&sectors[id], &walls[sectors[id].first_wall_id + j]);
