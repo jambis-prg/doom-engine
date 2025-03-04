@@ -25,7 +25,7 @@ bool g_init(uint16_t scrn_w, uint16_t scrn_h)
     game_manager.is_paused = false;
     game_manager.player = (player_t)
     {
-        .position = (vec3f_t){14, -22, 0},
+        .position = (vec3f_t){0, 0, 0},
         .angle = 0,
         .angle_cos = 1,
         .angle_sin = 0,
@@ -36,7 +36,7 @@ bool g_init(uint16_t scrn_w, uint16_t scrn_h)
     if (!w_init(scrn_w, scrn_h))
         return false;
 
-    if (!r_init(256, 256))
+    if (!r_init(scrn_w / 4, scrn_h / 4))
         return false;
 
     return true;
@@ -44,13 +44,18 @@ bool g_init(uint16_t scrn_w, uint16_t scrn_h)
 
 void g_run()
 {
-    wall_t walls[] = { { .a = {2, 8}, .b = {58, 8}, .is_portal = false } };
+    wall_t walls[] = { 
+        { .a = {5, 5}, .b = {-5, 5}, .is_portal = false }, 
+        { .a = {-5, -5}, .b = {5, -5}, .is_portal = false },
+        { .a = {5, -5}, .b = {5, 5}, .is_portal = false },
+        { .a = {-5, 5}, .b = {-5, -5}, .is_portal = false }
+    };
     sector_t sectors[] = {
         { 
             .first_wall_id = 0,       // Índice da primeira parede
-            .num_walls = 1,   // Número de paredes
+            .num_walls = 4,   // Número de paredes
             .z_floor = 0.0f,
-            .z_ceil = 3.0f
+            .z_ceil = 5.0f
         }
     };
     queue_sector_t queue = {
@@ -73,11 +78,12 @@ void g_run()
         float mouse_dx = mouse_x - last_mouse_x;
         last_mouse_x = mouse_x;
         game_manager.player.angle += mouse_dx * deltaTime;
-        game_manager.player.angle = fmod(game_manager.player.angle, 2 * PI);
     
         // Corrige valores negativos
         if (game_manager.player.angle < 0)
             game_manager.player.angle += 2 * PI;
+        else if (game_manager.player.angle >= 2 * PI)
+            game_manager.player.angle -= 2 * PI;
 
         game_manager.player.angle_cos = cos(game_manager.player.angle);
         game_manager.player.angle_sin = sin(game_manager.player.angle);
@@ -87,10 +93,12 @@ void g_run()
         vec3f_t current_pos = game_manager.player.position;
         printf("%.2f, %.2f - %.2f\n", current_pos.x, current_pos.y, game_manager.player.angle);
         vec2f_t dir = {0};
-        if(keystate[SDL_SCANCODE_W]) dir = (vec2f_t){dx, -dy};
-        if(keystate[SDL_SCANCODE_S]) dir = (vec2f_t){-dx, dy};
-        if(keystate[SDL_SCANCODE_A]) dir = (vec2f_t){dy, -dx};
-        if(keystate[SDL_SCANCODE_D]) dir = (vec2f_t){-dy, dx};
+        if(keystate[SDL_SCANCODE_W]) dir = (vec2f_t){dx, dy};
+        if(keystate[SDL_SCANCODE_S]) dir = (vec2f_t){-dx, -dy};
+        if(keystate[SDL_SCANCODE_A]) dir = (vec2f_t){-dy, dx};
+        if(keystate[SDL_SCANCODE_D]) dir = (vec2f_t){dy, -dx};
+        if(keystate[SDL_SCANCODE_Z]) current_pos.z += PLAYER_SPEED * deltaTime;
+        if(keystate[SDL_SCANCODE_C]) current_pos.z -= PLAYER_SPEED * deltaTime;
 
         game_manager.player.position = (vec3f_t) { current_pos.x + dir.x * deltaTime, current_pos.y + dir.y * deltaTime, current_pos.z };
 

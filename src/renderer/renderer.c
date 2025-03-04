@@ -83,8 +83,8 @@ static vec2f_t r_world_pos_to_camera(vec2f_t point)
 {
     const vec2f_t u = { point.x - camera_pos.x, point.y - camera_pos.y };
     return (vec2f_t) {
-        u.x * camera_angle_cos - u.y * camera_angle_sin,
-        u.x * camera_angle_sin + u.y * camera_angle_cos,
+        .x = u.x * camera_angle_cos - u.y * camera_angle_sin,
+        .y = u.x * camera_angle_sin + u.y * camera_angle_cos,
     };
 }
 
@@ -108,7 +108,7 @@ static void r_clip_behind_player(vec2f_t *a, float *z0, vec2f_t b, float z1)
     float distance_plane_b = b.y;
     float d = distance_plane_a - distance_plane_b;
     if (d == 0) d = 1;
-    float s = distance_plane_a / (distance_plane_a - distance_plane_b);
+    float s = distance_plane_a / d;
     a->x = a->x + s * (b.x - a->x);
     a->y = a->y + s * (b.y - a->y);
     if (a->y == 0) a->y = 1;
@@ -116,11 +116,19 @@ static void r_clip_behind_player(vec2f_t *a, float *z0, vec2f_t b, float z1)
     *z0 = *z0 + s * (z1 - (*z0));
 }
 
-static void r_draw_wall(sector_t *sector, wall_t *wall)
+static void r_draw_wall(sector_t *sector, wall_t *wall, bool back_face)
 {
     // Transformando as posições do mundo em relação ao player
     vec2f_t op0 = r_world_pos_to_camera(v2i_to_v2f(wall->a));
     vec2f_t op1 = r_world_pos_to_camera(v2i_to_v2f(wall->b));
+
+    if (back_face)
+    {
+        vec2f_t tmp = op0;
+        op0 = op1;
+        op1 = tmp;
+    }
+
     vec2f_t op2 = op0;
     vec2f_t op3 = op1;
     float z0 = 0 - camera_pos.z;
@@ -128,24 +136,25 @@ static void r_draw_wall(sector_t *sector, wall_t *wall)
     float z2 = z0 - 5;
     float z3 = z1 - 5;
     
-    op0 = (vec2f_t){op0.x * 200/op0.y + scrnw/2, z0*200/op0.y + scrnh/2};
-    op1 = (vec2f_t){op1.x * 200/op1.y + scrnw/2, z1*200/op1.y + scrnh/2};
-    op2 = (vec2f_t){op2.x * 200/op2.y + scrnw/2, z2*200/op2.y + scrnh/2};
-    op3 = (vec2f_t){op3.x * 200/op3.y + scrnw/2, z3*200/op3.y + scrnh/2};
-    
-    if (op0.y < 1 && op1.y < 1) return;
+    if (op0.y <= 0 && op1.y <= 0) 
+        return;
 
-    if (op0.y < 1)
+    if (op0.y <= 0)
     {
         r_clip_behind_player(&op0, &z0, op1, z1);
         r_clip_behind_player(&op2, &z2, op3, z3);
     }
 
-    if (op1.y < 1)
+    if (op1.y <= 0)
     {
         r_clip_behind_player(&op1, &z1, op0, z0);
         r_clip_behind_player(&op3, &z3, op2, z2);
     }
+
+    op0 = (vec2f_t){op0.x * 200/op0.y + scrnw/2, z0*200/op0.y + scrnh/2};
+    op1 = (vec2f_t){op1.x * 200/op1.y + scrnw/2, z1*200/op1.y + scrnh/2};
+    op2 = (vec2f_t){op2.x * 200/op2.y + scrnw/2, z2*200/op2.y + scrnh/2};
+    op3 = (vec2f_t){op3.x * 200/op3.y + scrnw/2, z3*200/op3.y + scrnh/2};
 
     int dy_bottom = op1.y - op0.y;
     int dy_top = op3.y - op2.y;
@@ -169,7 +178,9 @@ static void r_draw_wall(sector_t *sector, wall_t *wall)
         if (y1 > scrnh - 1) y1 = scrnh - 1;
         if (y2 > scrnh - 1) y2 = scrnh - 1;
 
-        for (int y = y1; y < y2; y++)
+        //screen_buffer[scrnw * y1 + x] = 0xFF0000FF;
+        //screen_buffer[scrnw * y2 + x] = 0xFF0000FF;
+        for (int y = y2; y < y1; y++)
             screen_buffer[scrnw * y + x] = 0xFF0000FF;
     }
 
@@ -341,8 +352,11 @@ void r_draw_sectors(sector_t *sectors, wall_t *walls, queue_sector_t *queue)
     {
         uint32_t id = queue->arr[(queue->front + i) % MAX_QUEUE];
 
-        for (uint32_t j = 0; j < sectors[id].num_walls; j++) 
-            r_draw_wall(&sectors[id], &walls[sectors[id].first_wall_id + j]);
+        for (uint8_t k = 0; k < 2; k++)
+        {
+            for (uint32_t j = 0; j < sectors[id].num_walls; j++) 
+                r_draw_wall(&sectors[id], &walls[sectors[id].first_wall_id + j], k);
+        }
     }
 }
 

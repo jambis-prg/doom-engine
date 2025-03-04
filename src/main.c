@@ -2,7 +2,7 @@
 
 int main()
 {
-    if (g_init(1024, 1024))
+    if (g_init(1280, 960))
     {
         g_run();
 
