@@ -13,8 +13,6 @@ typedef enum
     LOG_TRACE
 } LogType;
 
-void l_init();
-void l_shutdown();
 void l_log(LogType logType, const char* message, ...);
 
 // LOG COLORS

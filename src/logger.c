@@ -6,7 +6,6 @@
 #include <time.h>
 #include <stdarg.h>
 
-static bool initialized = false;
 static const char* level_strings[6][2] = { {FATAL_COLOR, "[FATAL]: "}, {ERROR_COLOR, "[ERROR]: "}, {WARN_COLOR, "[WARN]: "}, {INFO_COLOR, "[INFO]: "}, {DEBUG_COLOR, "[DEBUG]: "}, {TRACE_COLOR, "[TRACE]: "}};
 
 static int l_string_formated(char** buffer, const char* message, va_list args)
@@ -25,10 +24,10 @@ static int l_string_formated(char** buffer, const char* message, va_list args)
         {
             // Aloca memória para a string formatada
             *buffer = (char*)malloc(stringFormatedSize + 1);
-            if(buffer != NULL)
+            if(*buffer != NULL)
             {
                 // Copia para o buffer a string
-                vsnprintf((*buffer), stringFormatedSize + 1, message, cpyArgs);
+                vsnprintf((*buffer), stringFormatedSize + 1, message, args);
                 sucess = 1;
             }
         }
@@ -38,26 +37,9 @@ static int l_string_formated(char** buffer, const char* message, va_list args)
 
     return sucess;
 }
-
-void l_init()
-{
-    if(initialized)
-        DOOM_LOG_WARN("Logger has already initialized");
-
-    initialized = true;
-
-    DOOM_LOG_INFO("Logger initialized");
-}
-
-void l_shutdown()
-{
-    if(!initialized)
-        return;
-}
-
 void l_log(LogType logType, const char* message, ...)
 {
-    if(!initialized || strlen(message) <= 0)
+    if(strlen(message) <= 0)
         return;
 
     va_list args_list;

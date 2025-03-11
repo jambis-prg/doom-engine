@@ -2,8 +2,10 @@
 #include "window.h"
 #include "renderer/renderer.h"
 #include "player.h"
+#include "logger.h"
 #include "SDL2/SDL.h"
 #include "SDL2/SDL_keyboard.h"
+#include <string.h>
 
 #define PLAYER_SPEED 5
 
@@ -16,53 +18,47 @@ typedef struct _game_core
 
 static game_core_t game_manager = {0};
 
-#define g_swap(a, b) { typeof(a) tmp = a; a = b; b = tmp; }
-
-static int g_partition(queue_sector_t *queue, float *depth, int low, int high)
+static void g_merge(queue_sector_t *queue, float *depth, int low, int high)
 {
-    int pivot = depth[low];
-    int i = low;
-    int j = high + 1;
+    float tmp[queue->size];
+    uint32_t tmp_id[queue->size];
+    memcpy(tmp, depth, queue->size * sizeof(float));
+    memcpy(tmp_id, queue->arr, queue->size * sizeof(uint32_t));
 
-    while (i < j)
+    int pivot = (low + high) / 2;
+    int i1 = low, i2 = pivot + 1;
+    for (int curr = low; curr <= high; curr++)
     {
-        do
+        if (i2 > high || tmp[i1] > tmp[i2])
         {
-            i++;
+            depth[curr] = tmp[i1];
+            queue->arr[curr] = tmp_id[i1];
+            i1++;
         }
-        while (depth[i] > pivot && i < high);
-
-        do
+        else
         {
-            j--;
-        } while (depth[j] < pivot);
-
-        g_swap(depth[i], depth[j]);
-        g_swap(queue->arr[i], queue->arr[j]);
+            depth[curr] = tmp[i2];
+            queue->arr[curr] = tmp_id[i2];
+            i2++;
+        }
     }
-
-    g_swap(depth[i], depth[j]);
-    g_swap(queue->arr[i], queue->arr[j]);
-    
-    g_swap(depth[low], depth[j]);
-    g_swap(queue->arr[low], queue->arr[j]);
-    return j;
 }
 
-static void g_quick_sort_aux(queue_sector_t *queue, float *depth, int low, int high)
+static void g_merge_sort_aux(queue_sector_t *queue, float *depth, int low, int high)
 {
     if (low < high)
     {
-        int pivot = g_partition(queue, depth, low, high);
+        int pivot = (low + high) / 2;
 
-        g_quick_sort_aux(queue, depth, low, pivot - 1);
-        g_quick_sort_aux(queue, depth, pivot + 1, high);
+        g_merge_sort_aux(queue, depth, low, pivot);
+        g_merge_sort_aux(queue, depth, pivot + 1, high);
+        g_merge(queue, depth, low, high);
     }
 }
 
-static void g_quick_sort(queue_sector_t *queue, float *depth)
+static void g_merge_sort(queue_sector_t *queue, float *depth)
 {
-    g_quick_sort_aux(queue, depth, 0, queue->size - 1);
+    g_merge_sort_aux(queue, depth, 0, queue->size - 1);
 }
 
 static void g_sort_sectors(sector_t *sectors, queue_sector_t *queue)
@@ -86,7 +82,7 @@ static void g_sort_sectors(sector_t *sectors, queue_sector_t *queue)
     // os setores já estejam em maior parte organizados por causa das últimas interações
     // o que faz o quick sort ter complexidade temporal de n^2 enquanto o merge continua
     // com a mesma complexidade independente dos dados
-    g_quick_sort(queue, depth); 
+    g_merge_sort(queue, depth); 
 }
 
 bool g_init(uint16_t scrn_w, uint16_t scrn_h)
@@ -209,7 +205,7 @@ void g_run()
         float dx = game_manager.player.angle_sin * PLAYER_SPEED;
         float dy = game_manager.player.angle_cos * PLAYER_SPEED;
         vec3f_t current_pos = game_manager.player.position;
-        printf("%.2f, %.2f - %.2f\n", current_pos.x, current_pos.y, game_manager.player.angle);
+        DOOM_LOG_INFO("%.2f, %.2f - %.2f", current_pos.x, current_pos.y, game_manager.player.angle);
         vec2f_t dir = {0};
         if(keystate[SDL_SCANCODE_W]) dir = (vec2f_t){dx, dy};
         if(keystate[SDL_SCANCODE_S]) dir = (vec2f_t){-dx, -dy};

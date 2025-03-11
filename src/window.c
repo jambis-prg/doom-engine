@@ -8,7 +8,7 @@ bool w_init(uint16_t scrn_w, uint16_t scrn_h)
 {
     if (SDL_Init(SDL_INIT_VIDEO) < 0)
     {
-        DOOM_LOG_FATAL("Erro ao tentar iniciar o sistema SDL\n");
+        DOOM_LOG_FATAL("Erro ao tentar iniciar o sistema SDL");
         return false;
     }
 
@@ -21,7 +21,7 @@ bool w_init(uint16_t scrn_w, uint16_t scrn_h)
 
     if (window == NULL)
     {
-        DOOM_LOG_FATAL("Erro ao tentar criar janela\n");
+        DOOM_LOG_FATAL("Erro ao tentar criar janela");
         return false;
     }
     
