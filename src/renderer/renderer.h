@@ -9,6 +9,7 @@
 typedef struct _wall
 {
     vec2i_t a, b;
+    uint8_t texture_id;
     bool is_portal;
 } wall_t;
 
@@ -16,6 +17,7 @@ typedef struct _sector
 {
     uint32_t first_wall_id, num_walls;
     float z_floor, z_ceil;
+    vec2f_t center;
 } sector_t;
 
 typedef struct _queue_sector
@@ -25,9 +27,20 @@ typedef struct _queue_sector
     uint32_t front;
 } queue_sector_t;
 
+typedef struct _texture
+{
+    uint32_t width, height;
+
+    union
+    {
+        unsigned char *buffer;
+        uint32_t color;
+    } data;
+} texture_t;
+
 bool r_init(uint16_t scrn_w, uint16_t scrn_h);
 
-void r_begin_draw(const player_t *player);
+void r_begin_draw(const player_t *player, texture_t *textures);
 void r_draw_sectors(sector_t *sectors, wall_t *walls, queue_sector_t *queue);
 void r_end_draw();
 

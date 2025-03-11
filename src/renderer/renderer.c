@@ -4,6 +4,7 @@
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_render.h>
+#include "logger.h"
 
 #define EYE_Z 1.65f
 #define HFOV PI/2
@@ -19,6 +20,7 @@ static uint16_t scrnw = 0, scrnh = 0;
 static vec2f_t zdl, zdr, near_left, near_right, far_left, far_right;
 static vec3f_t camera_pos;
 static float camera_angle_cos, camera_angle_sin;
+static texture_t *textures_arr = NULL;
 
 static bool r_init_screen(uint16_t scrn_w, uint16_t scrn_h)
 {
@@ -37,6 +39,7 @@ static bool r_init_screen(uint16_t scrn_w, uint16_t scrn_h)
         free(screen_buffer);
     }
 
+    DOOM_LOG_ERROR("Nao foi possivel iniciar o buffer de renderizacao\n");
     return false;
 }
 
@@ -131,10 +134,10 @@ static void r_draw_wall(sector_t *sector, wall_t *wall, bool back_face)
 
     vec2f_t op2 = op0;
     vec2f_t op3 = op1;
-    float z0 = 0 - camera_pos.z;
-    float z1 = 0 - camera_pos.z;
-    float z2 = z0 - 5;
-    float z3 = z1 - 5;
+    float z0 = sector->z_floor - camera_pos.z;
+    float z1 = sector->z_floor - camera_pos.z;
+    float z2 = z0 - sector->z_ceil;
+    float z3 = z1 - sector->z_ceil;
     
     if (op0.y <= 0 && op1.y <= 0) 
         return;
@@ -167,23 +170,46 @@ static void r_draw_wall(sector_t *sector, wall_t *wall, bool back_face)
     if (op1.x < 1) op1.x = 1;
     if (op0.x > scrnw - 1) op0.x = scrnw - 1;
     if (op1.x > scrnw - 1) op1.x = scrnw - 1;
-
-    for (int x = op0.x; x < op1.x; x++)
+    
+    if (textures_arr[wall->texture_id].height == 1 && textures_arr[wall->texture_id].width == 1)
     {
-        int y1 = dy_bottom * (x - xs + 0.5) / dx + op0.y;
-        int y2 = dy_top * (x - xs + 0.5) / dx + op2.y;
-
-        if (y1 < 1) y1 = 1;
-        if (y2 < 1) y2 = 1;
-        if (y1 > scrnh - 1) y1 = scrnh - 1;
-        if (y2 > scrnh - 1) y2 = scrnh - 1;
-
-        //screen_buffer[scrnw * y1 + x] = 0xFF0000FF;
-        //screen_buffer[scrnw * y2 + x] = 0xFF0000FF;
-        for (int y = y2; y < y1; y++)
-            screen_buffer[scrnw * y + x] = 0xFF0000FF;
+        for (int x = op0.x; x < op1.x; x++)
+        {
+            int y1 = dy_bottom * (x - xs + 0.5) / dx + op0.y;
+            int y2 = dy_top * (x - xs + 0.5) / dx + op2.y;
+            
+            if (y1 < 1) y1 = 1;
+            if (y2 < 1) y2 = 1;
+            if (y1 > scrnh - 1) y1 = scrnh - 1;
+            if (y2 > scrnh - 1) y2 = scrnh - 1;
+            
+            //screen_buffer[scrnw * y1 + x] = 0xFF0000FF;
+            //screen_buffer[scrnw * y2 + x] = 0xFF0000FF;
+            for (int y = y2; y < y1; y++)
+                screen_buffer[scrnw * y + x] = textures_arr[wall->texture_id].data.color;
+        }
     }
-
+    else
+    {
+        for (int x = op0.x; x < op1.x; x++)
+        {
+            int y1 = dy_bottom * (x - xs + 0.5) / dx + op0.y;
+            int y2 = dy_top * (x - xs + 0.5) / dx + op2.y;
+            
+            if (y1 < 1) y1 = 1;
+            if (y2 < 1) y2 = 1;
+            if (y1 > scrnh - 1) y1 = scrnh - 1;
+            if (y2 > scrnh - 1) y2 = scrnh - 1;
+            
+            for (int y = y2; y < y1; y++)
+            {
+                uint32_t pixel = (textures_arr[wall->texture_id].height - y - 1) * textures_arr[wall->texture_id].width + x;
+                uint32_t color = textures_arr[wall->texture_id].data.buffer[pixel];
+                screen_buffer[scrnw * y + x] = color;
+            }
+        }
+    }
+    
     //if (op0.x > 0 && op0.x < scrnw && op0.y > 0 && op0.y < scrnh) r_verline(op0.x, op0.y, op0.y, 0xFF0000FF);
     //if (op1.x > 0 && op1.x < scrnw && op1.y > 0 && op1.y < scrnh) r_verline(op1.x, op1.y, op1.y, 0xFF0000FF);
 
@@ -317,7 +343,10 @@ bool r_init(uint16_t scrn_w, uint16_t scrn_h)
     renderer = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_SOFTWARE);
 
     if (renderer == NULL)
+    {
+        DOOM_LOG_ERROR("Nao foi possivel criar o renderer SDL\n");
         return false;
+    }
 
     if (!r_init_screen(scrn_w, scrn_h))
     {
@@ -337,13 +366,15 @@ bool r_init(uint16_t scrn_w, uint16_t scrn_h)
     return true;
 }
 
-void r_begin_draw(const player_t *player)
+void r_begin_draw(const player_t *player, texture_t *textures)
 {
     memset(screen_buffer, 0, screen_buffer_size);
 
     camera_pos = (vec3f_t){ player->position.x, player->position.y, player->position.z };
     camera_angle_cos = player->angle_cos;
     camera_angle_sin = player->angle_sin;
+
+    textures_arr = textures;
 }
 
 void r_draw_sectors(sector_t *sectors, wall_t *walls, queue_sector_t *queue)

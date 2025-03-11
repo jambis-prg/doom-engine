@@ -16,6 +16,79 @@ typedef struct _game_core
 
 static game_core_t game_manager = {0};
 
+#define g_swap(a, b) { typeof(a) tmp = a; a = b; b = tmp; }
+
+static int g_partition(queue_sector_t *queue, float *depth, int low, int high)
+{
+    int pivot = depth[low];
+    int i = low;
+    int j = high + 1;
+
+    while (i < j)
+    {
+        do
+        {
+            i++;
+        }
+        while (depth[i] > pivot && i < high);
+
+        do
+        {
+            j--;
+        } while (depth[j] < pivot);
+
+        g_swap(depth[i], depth[j]);
+        g_swap(queue->arr[i], queue->arr[j]);
+    }
+
+    g_swap(depth[i], depth[j]);
+    g_swap(queue->arr[i], queue->arr[j]);
+    
+    g_swap(depth[low], depth[j]);
+    g_swap(queue->arr[low], queue->arr[j]);
+    return j;
+}
+
+static void g_quick_sort_aux(queue_sector_t *queue, float *depth, int low, int high)
+{
+    if (low < high)
+    {
+        int pivot = g_partition(queue, depth, low, high);
+
+        g_quick_sort_aux(queue, depth, low, pivot - 1);
+        g_quick_sort_aux(queue, depth, pivot + 1, high);
+    }
+}
+
+static void g_quick_sort(queue_sector_t *queue, float *depth)
+{
+    g_quick_sort_aux(queue, depth, 0, queue->size - 1);
+}
+
+static void g_sort_sectors(sector_t *sectors, queue_sector_t *queue)
+{
+    float depth[queue->size];
+
+    for (uint32_t i = 0; i < queue->size; i++)
+    {
+        uint32_t id = queue->arr[i];
+        // Transformando as posições do mundo em relação ao player
+        vec2f_t u = { sectors[id].center.x - game_manager.player.position.x, sectors[id].center.y - game_manager.player.position.y };
+        u = (vec2f_t) {
+            .x = u.x * game_manager.player.angle_cos - u.y * game_manager.player.angle_sin,
+            .y = u.x * game_manager.player.angle_sin + u.y * game_manager.player.angle_cos,
+        };
+
+        depth[i] = sqrt(u.x * u.x + u.y * u.y);
+    }
+
+    // TODO: Trocar para o merge sort, pq é bem provável que
+    // os setores já estejam em maior parte organizados por causa das últimas interações
+    // o que faz o quick sort ter complexidade temporal de n^2 enquanto o merge continua
+    // com a mesma complexidade independente dos dados
+    g_quick_sort(queue, depth); 
+}
+
 bool g_init(uint16_t scrn_w, uint16_t scrn_h)
 {
     game_manager.scrnw = scrn_w;
@@ -33,6 +106,7 @@ bool g_init(uint16_t scrn_w, uint16_t scrn_h)
         .velocity = (vec3f_t){ 0, 0, 0},
         .yaw = 0
     };
+    
     if (!w_init(scrn_w, scrn_h))
         return false;
 
@@ -44,24 +118,68 @@ bool g_init(uint16_t scrn_w, uint16_t scrn_h)
 
 void g_run()
 {
-    wall_t walls[] = { 
-        { .a = {5, 5}, .b = {-5, 5}, .is_portal = false }, 
-        { .a = {-5, -5}, .b = {5, -5}, .is_portal = false },
-        { .a = {5, -5}, .b = {5, 5}, .is_portal = false },
-        { .a = {-5, 5}, .b = {-5, -5}, .is_portal = false }
+    wall_t walls[8] = { 
+        { .a = {5, 5}, .b = {-5, 5}, .is_portal = false, .texture_id = 0 }, 
+        { .a = {-5, -5}, .b = {5, -5}, .is_portal = false, .texture_id = 0 },
+        { .a = {5, -5}, .b = {5, 5}, .is_portal = false, .texture_id = 0 },
+        { .a = {-5, 5}, .b = {-5, -5}, .is_portal = false, .texture_id = 0 },
     };
+
+    for (uint32_t i = 1; i < 2; i++)
+    {
+        uint32_t j = 4 * i;
+        walls[j] = (wall_t){.a = {5, 5}, .b = {-5, 5}, .is_portal = false, .texture_id = i};
+        walls[j + 1] = (wall_t){.a = {-5, -5}, .b = {5, -5}, .is_portal = false, .texture_id = i};
+        walls[j + 2] = (wall_t){.a = {5, -5}, .b = {5, 5}, .is_portal = false, .texture_id = i};
+        walls[j + 3] = (wall_t){.a = {-5, 5}, .b = {-5, -5}, .is_portal = false, .texture_id = i};
+
+        for (uint32_t k = 0; k < 4; k++)
+        {
+            walls[j + k].a.x += 15 * i;
+            walls[j + k].a.y += 15 * i;
+            walls[j + k].b.x += 15 * i;
+            walls[j + k].b.y += 15 * i;
+        }
+    }
+
     sector_t sectors[] = {
         { 
             .first_wall_id = 0,       // Índice da primeira parede
             .num_walls = 4,   // Número de paredes
             .z_floor = 0.0f,
             .z_ceil = 5.0f
-        }
+        },
+        { 
+            .first_wall_id = 4,       // Índice da primeira parede
+            .num_walls = 4,   // Número de paredes
+            .z_floor = 0.0f,
+            .z_ceil = 5.0f
+        },
     };
+
+
+    for (uint32_t i = 0; i < 2; i++)
+    {
+        for (uint32_t j = 0; j < sectors[i].num_walls; j++)
+        {
+            const wall_t *wall = &walls[sectors[i].first_wall_id + j];
+            sectors[i].center.x += (wall->a.x + wall->b.x) / 2.f;
+            sectors[i].center.y += (wall->a.y + wall->b.y) / 2.f;
+        }
+
+        sectors[i].center.x /= sectors[i].num_walls;
+        sectors[i].center.y /= sectors[i].num_walls;
+    }
+
     queue_sector_t queue = {
-        .arr = { 0 },  // Adiciona o ID do setor
-        .size = 1,                    // Apenas 1 elemento na fila
+        .arr = { 0, 1 },  // Adiciona o ID do setor
+        .size = 2,                    // Apenas 1 elemento na fila
         .front = 0,
+    };
+
+    texture_t textures[] = {
+        { .width = 1, .height = 1, .data.color = 0xFF0000FF},
+        { .width = 1, .height = 1, .data.color = 0xFF00FF00}
     };
 
     const uint8_t* keystate = SDL_GetKeyboardState(NULL);
@@ -102,7 +220,9 @@ void g_run()
 
         game_manager.player.position = (vec3f_t) { current_pos.x + dir.x * deltaTime, current_pos.y + dir.y * deltaTime, current_pos.z };
 
-        r_begin_draw(&game_manager.player);
+        g_sort_sectors(sectors, &queue);
+
+        r_begin_draw(&game_manager.player, textures);
 
         r_draw_sectors(sectors, walls, &queue);
 

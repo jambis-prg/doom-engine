@@ -1,12 +1,16 @@
 #include "window.h"
 #include <SDL2/SDL.h>
+#include "logger.h"
 
 static SDL_Window *window = NULL;
 
 bool w_init(uint16_t scrn_w, uint16_t scrn_h)
 {
     if (SDL_Init(SDL_INIT_VIDEO) < 0)
+    {
+        DOOM_LOG_FATAL("Erro ao tentar iniciar o sistema SDL\n");
         return false;
+    }
 
     window = SDL_CreateWindow(
         "Doom", 
@@ -16,8 +20,11 @@ bool w_init(uint16_t scrn_w, uint16_t scrn_h)
     );
 
     if (window == NULL)
+    {
+        DOOM_LOG_FATAL("Erro ao tentar criar janela\n");
         return false;
-
+    }
+    
     return true;
 }
 
