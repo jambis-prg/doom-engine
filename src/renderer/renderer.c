@@ -55,7 +55,9 @@ static void r_clip_behind_player(vec2f_t *a, float *z0, vec2f_t b, float z1)
     float s = distance_plane_a / d;
     a->x = a->x + s * (b.x - a->x);
     a->y = a->y + s * (b.y - a->y);
-    if (a->y == 0) a->y = 1;
+    // Esses valores são especulados mas basicamente sem eles Y seria tão pequeno
+    // Que as divisões por ele se tornariam muito absurdas causando bugs visuais
+    if (a->y < 0.01f && a->y > -0.01f) a->y = 1; 
 
     *z0 = *z0 + s * (z1 - (*z0));
 }

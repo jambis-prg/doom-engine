@@ -180,49 +180,62 @@ void g_run()
 
     const uint8_t* keystate = SDL_GetKeyboardState(NULL);
     uint64_t last = SDL_GetPerformanceCounter(), now = 0;
-    int last_mouse_x = 0;
+    float sense = 0.2f;
+
+    bool esc_pressed = false;
     while (game_manager.is_running && w_handle_events()) 
     {
         now = SDL_GetPerformanceCounter();
         double deltaTime = (double)((now - last) * 1000 / (double)SDL_GetPerformanceFrequency()) * 0.001;
         last = now;
-
-        int mouse_x = 0;
-        SDL_GetMouseState(&mouse_x, NULL);
-        float mouse_dx = mouse_x - last_mouse_x;
-        last_mouse_x = mouse_x;
-        game_manager.player.angle += mouse_dx * deltaTime;
-    
-        // Corrige valores negativos
-        if (game_manager.player.angle < 0)
-            game_manager.player.angle += 2 * PI;
-        else if (game_manager.player.angle >= 2 * PI)
-            game_manager.player.angle -= 2 * PI;
-
-        game_manager.player.angle_cos = cos(game_manager.player.angle);
-        game_manager.player.angle_sin = sin(game_manager.player.angle);
         
-        float dx = game_manager.player.angle_sin * PLAYER_SPEED;
-        float dy = game_manager.player.angle_cos * PLAYER_SPEED;
-        vec3f_t current_pos = game_manager.player.position;
-        DOOM_LOG_INFO("%.2f, %.2f - %.2f", current_pos.x, current_pos.y, game_manager.player.angle);
-        vec2f_t dir = {0};
-        if(keystate[SDL_SCANCODE_W]) dir = (vec2f_t){dx, dy};
-        if(keystate[SDL_SCANCODE_S]) dir = (vec2f_t){-dx, -dy};
-        if(keystate[SDL_SCANCODE_A]) dir = (vec2f_t){-dy, dx};
-        if(keystate[SDL_SCANCODE_D]) dir = (vec2f_t){dy, -dx};
-        if(keystate[SDL_SCANCODE_Z]) current_pos.z += PLAYER_SPEED * deltaTime;
-        if(keystate[SDL_SCANCODE_C]) current_pos.z -= PLAYER_SPEED * deltaTime;
+        if(keystate[SDL_SCANCODE_ESCAPE]) 
+        {
+            if (!esc_pressed)
+                game_manager.is_paused = !game_manager.is_paused;
+            esc_pressed = true;
+        }
+        else
+            esc_pressed = false;
 
-        game_manager.player.position = (vec3f_t) { current_pos.x + dir.x * deltaTime, current_pos.y + dir.y * deltaTime, current_pos.z };
-
-        g_sort_sectors(sectors, &queue);
-
-        r_begin_draw(&game_manager.player, textures);
-
-        r_draw_sectors(sectors, walls, &queue);
-
-        r_end_draw();
+        if (!game_manager.is_paused)
+        {
+            int mouse_x = 0;
+            SDL_GetMouseState(&mouse_x, NULL);
+            SDL_WarpMouseInWindow((SDL_Window*)w_get_handler(), game_manager.scrnw / 2, game_manager.scrnh / 2);
+            float mouse_dx = mouse_x - game_manager.scrnw / 2;
+            game_manager.player.angle += mouse_dx * deltaTime * sense;
+                
+            // Corrige valores negativos
+            if (game_manager.player.angle < 0)
+                game_manager.player.angle += 2 * PI;
+            else if (game_manager.player.angle >= 2 * PI)
+                game_manager.player.angle -= 2 * PI;
+    
+            game_manager.player.angle_cos = cos(game_manager.player.angle);
+            game_manager.player.angle_sin = sin(game_manager.player.angle);
+            
+            float dx = game_manager.player.angle_sin * PLAYER_SPEED;
+            float dy = game_manager.player.angle_cos * PLAYER_SPEED;
+            vec3f_t current_pos = game_manager.player.position;
+            vec2f_t dir = {0};
+            if(keystate[SDL_SCANCODE_W]) dir = (vec2f_t){dx, dy};
+            if(keystate[SDL_SCANCODE_S]) dir = (vec2f_t){-dx, -dy};
+            if(keystate[SDL_SCANCODE_A]) dir = (vec2f_t){-dy, dx};
+            if(keystate[SDL_SCANCODE_D]) dir = (vec2f_t){dy, -dx};
+            if(keystate[SDL_SCANCODE_Z]) current_pos.z += PLAYER_SPEED * deltaTime;
+            if(keystate[SDL_SCANCODE_C]) current_pos.z -= PLAYER_SPEED * deltaTime;
+            
+            game_manager.player.position = (vec3f_t) { current_pos.x + dir.x * deltaTime, current_pos.y + dir.y * deltaTime, current_pos.z };
+    
+            g_sort_sectors(sectors, &queue);
+    
+            r_begin_draw(&game_manager.player, textures);
+    
+            r_draw_sectors(sectors, walls, &queue);
+    
+            r_end_draw();
+        }
     }
 }
 
