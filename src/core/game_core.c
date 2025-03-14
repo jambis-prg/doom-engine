@@ -78,10 +78,6 @@ static void g_sort_sectors(sector_t *sectors, queue_sector_t *queue)
         depth[i] = sqrt(u.x * u.x + u.y * u.y);
     }
 
-    // TODO: Trocar para o merge sort, pq é bem provável que
-    // os setores já estejam em maior parte organizados por causa das últimas interações
-    // o que faz o quick sort ter complexidade temporal de n^2 enquanto o merge continua
-    // com a mesma complexidade independente dos dados
     g_merge_sort(queue, depth); 
 }
 
