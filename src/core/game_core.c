@@ -136,12 +136,16 @@ void g_run()
 
     sector_t sectors[] = {
         { 
+            .ceil_texture_id = 1,
+            .floor_texture_id = 1,
             .first_wall_id = 0,       // Índice da primeira parede
             .num_walls = 4,   // Número de paredes
             .z_floor = 0.0f,
             .z_ceil = 5.0f
         },
         { 
+            .ceil_texture_id = 0,
+            .floor_texture_id = 0,
             .first_wall_id = 4,       // Índice da primeira parede
             .num_walls = 4,   // Número de paredes
             .z_floor = 0.0f,
@@ -219,8 +223,8 @@ void g_run()
             if(keystate[SDL_SCANCODE_S]) dir = (vec2f_t){-dx, -dy};
             if(keystate[SDL_SCANCODE_A]) dir = (vec2f_t){-dy, dx};
             if(keystate[SDL_SCANCODE_D]) dir = (vec2f_t){dy, -dx};
-            if(keystate[SDL_SCANCODE_Z]) current_pos.z += PLAYER_SPEED * deltaTime;
-            if(keystate[SDL_SCANCODE_C]) current_pos.z -= PLAYER_SPEED * deltaTime;
+            if(keystate[SDL_SCANCODE_Z]) current_pos.z -= PLAYER_SPEED * deltaTime;
+            if(keystate[SDL_SCANCODE_C]) current_pos.z += PLAYER_SPEED * deltaTime;
             
             game_manager.player.position = (vec3f_t) { current_pos.x + dir.x * deltaTime, current_pos.y + dir.y * deltaTime, current_pos.z };
     

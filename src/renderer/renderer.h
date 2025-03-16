@@ -15,6 +15,7 @@ typedef struct _wall
 
 typedef struct _sector
 {
+    uint8_t ceil_texture_id, floor_texture_id;
     uint32_t first_wall_id, num_walls;
     float z_floor, z_ceil;
     vec2f_t center;

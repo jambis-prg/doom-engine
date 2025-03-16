@@ -6,14 +6,19 @@
 #include <SDL2/SDL_render.h>
 #include "logger.h"
 
+typedef enum _surface_type { NONE = 0, FLOOR = 1, CEIL = 2 } surface_type_t;
+
 static SDL_Renderer *renderer = NULL;
 static SDL_Texture *screen_texture = NULL;
 static uint32_t *screen_buffer = NULL;
 static uint32_t screen_buffer_size = 0;
 static uint16_t scrnw = 0, scrnh = 0;
 static vec3f_t camera_pos;
-static float camera_angle_cos, camera_angle_sin, camera_dir_z;
+static float camera_angle_cos, camera_angle_sin;
 static texture_t *textures_arr = NULL;
+static vec2i_t *surface_buffer = NULL;
+static surface_type_t surface_type = NONE;
+static vec2i_t surface_x_range = {0, 0};
 
 static bool r_init_screen(uint16_t scrn_w, uint16_t scrn_h)
 {
@@ -81,8 +86,8 @@ static void r_draw_wall(sector_t *sector, wall_t *wall)
 
     vec2f_t op2 = op0;
     vec2f_t op3 = op1;
-    float z0 = sector->z_floor - camera_pos.z;
-    float z1 = sector->z_floor - camera_pos.z;
+    float z0 = sector->z_floor + camera_pos.z;
+    float z1 = sector->z_floor + camera_pos.z;
     float z2 = z0 - sector->z_ceil;
     float z3 = z1 - sector->z_ceil;
 
@@ -120,6 +125,11 @@ static void r_draw_wall(sector_t *sector, wall_t *wall)
     
     if (textures_arr[wall->texture_id].height == 1 && textures_arr[wall->texture_id].width == 1)
     {
+        if (surface_type != NONE && op0.x < surface_x_range.x)
+            surface_x_range.x = op0.x;
+        if (surface_type != NONE && op1.x > surface_x_range.y)
+            surface_x_range.y = op1.x;
+
         for (int x = op0.x; x < op1.x; x++)
         {
             int y1 = dy_bottom * (x - xs + 0.5) / dx + op0.y;
@@ -129,6 +139,15 @@ static void r_draw_wall(sector_t *sector, wall_t *wall)
             if (y2 < 1) y2 = 1;
             if (y1 > scrnh - 1) y1 = scrnh - 1;
             if (y2 > scrnh - 1) y2 = scrnh - 1;
+            
+            if (dot < 0)
+            {
+                if (surface_type == FLOOR)  { surface_buffer[x].x = y2; continue; }
+                if (surface_type == CEIL)   { surface_buffer[x].x = y1; continue; }
+            }
+
+            if (surface_type == FLOOR)  { surface_buffer[x].y = y2; }
+            if (surface_type == CEIL)   { surface_buffer[x].y = y1; }
             
             for (int y = y2; y < y1; y++)
                 screen_buffer[scrnw * y + x] = textures_arr[wall->texture_id].data.color;
@@ -146,7 +165,7 @@ static void r_draw_wall(sector_t *sector, wall_t *wall)
             if (y1 > scrnh - 1) y1 = scrnh - 1;
             if (y2 > scrnh - 1) y2 = scrnh - 1;
             
-            for (int y = y2; y < y1; y++)
+            for (int y = y1; y < y2; y++)
             {
                 uint32_t pixel = (textures_arr[wall->texture_id].height - y - 1) * textures_arr[wall->texture_id].width + x;
                 uint32_t color = textures_arr[wall->texture_id].data.buffer[pixel];
@@ -161,6 +180,13 @@ bool r_init(uint16_t scrn_w, uint16_t scrn_h)
     SDL_Window *win = (SDL_Window*)w_get_handler();
     scrnw = scrn_w;
     scrnh = scrn_h;
+    surface_buffer = (vec2i_t*)malloc(scrn_w * sizeof(vec2i_t));
+
+    if (surface_buffer == NULL)
+    {
+        DOOM_LOG_ERROR("Nao foi possivel alocar memoria para o buffer de superficie");
+        return false;
+    }
 
     renderer = SDL_CreateRenderer(win, -1, SDL_RENDERER_SOFTWARE);
 
@@ -177,7 +203,6 @@ bool r_init(uint16_t scrn_w, uint16_t scrn_h)
     }
 
     SDL_RenderSetLogicalSize(renderer, scrn_w, scrn_h);
-
     return true;
 }
 
@@ -198,8 +223,39 @@ void r_draw_sectors(sector_t *sectors, wall_t *walls, queue_sector_t *queue)
     {
         uint32_t id = queue->arr[(queue->front + i) % MAX_QUEUE];
 
-        for (uint32_t j = 0; j < sectors[id].num_walls; j++) 
+        if (camera_pos.z < sectors[id].z_floor) surface_type = CEIL;
+        else if (camera_pos.z > sectors[id].z_ceil) surface_type = FLOOR;
+        else surface_type = NONE;
+        DOOM_LOG_DEBUG("PZ: %.2f, ZF: %.2f, ZC: %.2f", camera_pos.z, sectors[id].z_floor, sectors[id].z_ceil);
+
+        surface_x_range.x = scrnw;
+        surface_x_range.y = 0;
+
+        for (uint32_t j = 0; j < sectors[id].num_walls; j++)
             r_draw_wall(&sectors[id], &walls[sectors[id].first_wall_id + j]);
+
+        if (surface_type == FLOOR) 
+        { 
+            for(int x = surface_x_range.x; x < surface_x_range.y; x++)
+                for (int y = surface_buffer[x].x; y < surface_buffer[x].y; y++)
+                {
+                    if (y < 0 || y > scrnh || x < 0 || x > scrnw) 
+                        return;
+                    screen_buffer[scrnw * y + x] = textures_arr[sectors[id].floor_texture_id].data.color;
+                }
+        }
+        else if (surface_type == CEIL) 
+        { 
+            for(int x = surface_x_range.x; x < surface_x_range.y; x++)
+            {
+                for (int y = surface_buffer[x].y; y < surface_buffer[x].x; y++)
+                {
+                    if (y < 0 || y > scrnh || x < 0 || x > scrnw) 
+                    return;
+                    screen_buffer[scrnw * y + x] = textures_arr[sectors[id].ceil_texture_id].data.color;
+                }
+            }
+        }
     }
 }
 
@@ -214,5 +270,6 @@ void r_shutdown()
 {
     SDL_DestroyTexture(screen_texture);
     free(screen_buffer);
+    free(surface_buffer);
     SDL_DestroyRenderer(renderer);
 }
