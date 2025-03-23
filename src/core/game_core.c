@@ -7,6 +7,7 @@
 #include "SDL2/SDL_keyboard.h"
 #include <string.h>
 
+
 #define PLAYER_SPEED 5
 
 typedef struct _game_core
@@ -110,51 +111,58 @@ bool g_init(uint16_t scrn_w, uint16_t scrn_h)
 
 void g_run()
 {
-    wall_t walls[8] = { 
-        { .a = {5, 5}, .b = {-5, 5}, .is_portal = false, .texture_id = 0 }, 
-        { .a = {-5, -5}, .b = {5, -5}, .is_portal = false, .texture_id = 0 },
-        { .a = {5, -5}, .b = {5, 5}, .is_portal = false, .texture_id = 0 },
-        { .a = {-5, 5}, .b = {-5, -5}, .is_portal = false, .texture_id = 0 },
+    wall_t walls[] = { 
+        // Setor 1 (Pentágono)
+        { .a = {0, 0}, .b = {10, 0}, .is_portal = false, .texture_id = 3 },
+        { .a = {10, 0}, .b = {12, 5}, .is_portal = false, .texture_id = 3 },
+        { .a = {12, 5}, .b = {5, 10}, .is_portal = false, .texture_id = 3 },
+        { .a = {5, 10}, .b = {-2, 5}, .is_portal = false, .texture_id = 3 },
+        { .a = {-2, 5}, .b = {0, 0}, .is_portal = false, .texture_id = 3 },
+
+        // Setor 2 (Triângulo)
+        { .a = {15, 5}, .b = {20, 5}, .is_portal = false, .texture_id = 1 },
+        { .a = {20, 5}, .b = {17, 10}, .is_portal = false, .texture_id = 1 },
+        { .a = {17, 10}, .b = {15, 5}, .is_portal = false, .texture_id = 1 },
+
+        // Setor 3 (Hexágono)
+        { .a = {10, 15}, .b = {15, 12}, .is_portal = false, .texture_id = 2 },
+        { .a = {15, 12}, .b = {20, 15}, .is_portal = false, .texture_id = 2 },
+        { .a = {20, 15}, .b = {20, 20}, .is_portal = false, .texture_id = 2 },
+        { .a = {20, 20}, .b = {15, 23}, .is_portal = false, .texture_id = 2 },
+        { .a = {15, 23}, .b = {10, 20}, .is_portal = false, .texture_id = 2 },
+        { .a = {10, 20}, .b = {10, 15}, .is_portal = false, .texture_id = 2 },
+
     };
-
-    for (uint32_t i = 1; i < 2; i++)
-    {
-        uint32_t j = 4 * i;
-        walls[j] = (wall_t){.a = {5, 5}, .b = {-5, 5}, .is_portal = false, .texture_id = i};
-        walls[j + 1] = (wall_t){.a = {-5, -5}, .b = {5, -5}, .is_portal = false, .texture_id = i};
-        walls[j + 2] = (wall_t){.a = {5, -5}, .b = {5, 5}, .is_portal = false, .texture_id = i};
-        walls[j + 3] = (wall_t){.a = {-5, 5}, .b = {-5, -5}, .is_portal = false, .texture_id = i};
-
-        for (uint32_t k = 0; k < 4; k++)
-        {
-            walls[j + k].a.x += 15 * i;
-            walls[j + k].a.y += 15 * i;
-            walls[j + k].b.x += 15 * i;
-            walls[j + k].b.y += 15 * i;
-        }
-    }
 
     sector_t sectors[] = {
         { 
             .ceil_texture_id = 1,
             .floor_texture_id = 1,
             .first_wall_id = 0,       // Índice da primeira parede
-            .num_walls = 4,   // Número de paredes
+            .num_walls = 5,   // Número de paredes
+            .z_floor = 0.0f,
+            .z_ceil = 5.0f
+        },
+        { 
+            .ceil_texture_id = 2,
+            .floor_texture_id = 2,
+            .first_wall_id = 5,       // Índice da primeira parede
+            .num_walls = 3,   // Número de paredes
             .z_floor = 0.0f,
             .z_ceil = 5.0f
         },
         { 
             .ceil_texture_id = 0,
             .floor_texture_id = 0,
-            .first_wall_id = 4,       // Índice da primeira parede
-            .num_walls = 4,   // Número de paredes
+            .first_wall_id = 8,       // Índice da primeira parede
+            .num_walls = 6,   // Número de paredes
             .z_floor = 0.0f,
             .z_ceil = 5.0f
         },
     };
 
-
-    for (uint32_t i = 0; i < 2; i++)
+    uint32_t sectors_count = sizeof(sectors)/sizeof(sector_t);
+    for (uint32_t i = 0; i < sectors_count; i++)
     {
         for (uint32_t j = 0; j < sectors[i].num_walls; j++)
         {
@@ -168,14 +176,16 @@ void g_run()
     }
 
     queue_sector_t queue = {
-        .arr = { 0, 1 },  // Adiciona o ID do setor
-        .size = 2,                    // Apenas 1 elemento na fila
+        .arr = { 0, 1, 2 },  // Adiciona o ID do setor
+        .size = 3,                    // Apenas 1 elemento na fila
         .front = 0,
     };
-
+    
     texture_t textures[] = {
         { .width = 1, .height = 1, .data.color = 0xFF0000FF},
-        { .width = 1, .height = 1, .data.color = 0xFF00FF00}
+        { .width = 1, .height = 1, .data.color = 0xFF00FF00},
+        { .width = 1, .height = 1, .data.color = 0xFFFF0000},
+        r_create_texture("resources/textures/wall_texture_argb.bmp", 8, 8)
     };
 
     const uint8_t* keystate = SDL_GetKeyboardState(NULL);
@@ -233,7 +243,9 @@ void g_run()
             r_begin_draw(&game_manager.player, textures);
     
             r_draw_sectors(sectors, walls, &queue);
-    
+
+            // r_draw_floor();
+
             r_end_draw();
         }
     }
