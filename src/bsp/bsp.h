@@ -11,6 +11,7 @@ typedef struct _bsp_node
     seg_t *segs;
 } bsp_node_t;
 
-
+bsp_node_t bsp_create(uint32_t nodes_len, node_t *nodes, subsector_t *subsectors, seg_t *segs);
+void bsp_delete(bsp_node_t *bsp);
 
 #endif
