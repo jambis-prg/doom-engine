@@ -7,6 +7,8 @@
 #include <SDL2/SDL_render.h>
 #include "logger.h"
 
+
+
 #define FOV 200
 
 typedef enum _surface_type { NONE = 0, FLOOR = 1, CEIL = 2 } surface_type_t;

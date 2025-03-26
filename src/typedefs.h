@@ -46,7 +46,7 @@ typedef struct _linedef
 
 typedef struct _bbox
 {
-    int16_t top, bottom, left, right;
+    int16_t left, right, top, bottom;
 } bbox_t;
 
 typedef struct _node
@@ -62,6 +62,10 @@ typedef struct _subsector
     int16_t seg_count, first_seg_id;
 } subsector_t;
 
+// Os ângulos de doom são dados em um formato diferente
+// de graus e radianos que é específico do jogo, logo
+// toda e qualquer operação que envolva ângulos precisa ser
+// feita com isso em mente
 typedef struct _seg
 {
     int16_t start_vertex, end_vertex, 
@@ -75,4 +79,18 @@ typedef struct _entity
             type, flags;
 } entity_t;
 
+typedef struct _sector2
+{
+    int16_t floor_z, ceil_z, light_level, type, tag;
+    char floor_texture_name[8];
+    char ceil_texture_name[8];
+} sector2_t;
+
+typedef struct _sidedef
+{
+    int16_t x_offset, y_offset, sector_id;
+    char upper_texture_name[8];
+    char lower_texture_name[8];
+    char mid_texture_name[8];
+} sidedef_t;
 #endif

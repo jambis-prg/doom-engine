@@ -3,15 +3,16 @@
 
 #include "typedefs.h"
 
-typedef struct _bsp_node
+typedef struct _bsp
 {
     int16_t root_id;
     node_t *nodes;
     subsector_t *subsectors;
     seg_t *segs;
-} bsp_node_t;
+    vertex_t *vertexes;
+} bsp_t;
 
-bsp_node_t bsp_create(uint32_t nodes_len, node_t *nodes, subsector_t *subsectors, seg_t *segs);
-void bsp_delete(bsp_node_t *bsp);
+bsp_t bsp_create(uint32_t nodes_len, node_t *nodes, subsector_t *subsectors, seg_t *segs, vertex_t *vertexes);
+void bsp_delete(bsp_t *bsp);
 
 #endif
