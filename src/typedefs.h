@@ -46,15 +46,17 @@ typedef struct _linedef
 
 typedef struct _bbox
 {
-    int16_t left, right, top, bottom;
+    int16_t top, bottom, left, right;
 } bbox_t;
 
 typedef struct _node
 {
     int16_t x_partition, y_partition,
-            dx_partition, dy_partition,
-            right_child, left_child;
+            dx_partition, dy_partition;
+
     bbox_t right_bbox, left_bbox;
+
+    int16_t right_child, left_child;
 } node_t;
 
 typedef struct _subsector
@@ -62,10 +64,9 @@ typedef struct _subsector
     int16_t seg_count, first_seg_id;
 } subsector_t;
 
-// Os ângulos de doom são dados em um formato diferente
-// de graus e radianos que é específico do jogo, logo
-// toda e qualquer operação que envolva ângulos precisa ser
-// feita com isso em mente
+// Os ângulos de doom são dados em BAMs para segmentos
+// enquanto para entidades é dado em graus
+
 typedef struct _seg
 {
     int16_t start_vertex, end_vertex, 
@@ -79,18 +80,68 @@ typedef struct _entity
             type, flags;
 } entity_t;
 
-typedef struct _sector2
+typedef struct _sector
 {
-    int16_t floor_z, ceil_z, light_level, type, tag;
+    int16_t floor_z, ceil_z;
+
     char floor_texture_name[8];
     char ceil_texture_name[8];
-} sector2_t;
+    
+    int16_t light_level, type, tag;
+} sector_t;
 
 typedef struct _sidedef
 {
-    int16_t x_offset, y_offset, sector_id;
+    int16_t x_offset, y_offset;
+    
     char upper_texture_name[8];
     char lower_texture_name[8];
     char mid_texture_name[8];
+
+    int16_t sector_id;
 } sidedef_t;
+
+typedef struct _palette
+{
+    unsigned char r, g, b;
+} palette_t;
+
+typedef struct _patch_colum
+{
+    uint8_t top_delta, length;
+    uint8_t padding_pre; // unused
+    uint8_t *data; // size_bytes = length
+    uint8_t padding_post; // unused
+} patch_colum_t;
+
+typedef struct _patch_header
+{
+    uint16_t width, height;
+    int16_t left_offset, top_ofsset;
+    uint32_t *column_offset; // size_bytes = 4 * width
+} patch_header_t;
+
+typedef struct _texture_header
+{
+    uint32_t texture_count;
+    uint32_t *texture_data_offset;
+} texture_header_t;
+
+typedef struct _patch_map
+{
+    int16_t x_offset, y_offset;
+    uint16_t patch_name_index;
+    int16_t step_dir, color_map; // unused
+} patch_map_t;
+
+typedef struct _texture_map
+{
+    char name[8];
+    uint32_t flags;
+    uint16_t width, height;
+    uint32_t column_dir; // unused
+    uint16_t patch_count;
+    patch_map_t *patch_maps;
+} texture_map_t;
+
 #endif

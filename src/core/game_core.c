@@ -2,13 +2,30 @@
 #include "window.h"
 #include "renderer/renderer.h"
 #include "player.h"
+#include "bsp/bsp.h"
 #include "logger.h"
+#include "wad/wad_reader.h"
 #include "SDL2/SDL.h"
 #include "SDL2/SDL_keyboard.h"
 #include <string.h>
+#include "utils.h"
+#include "assets/asset.h"
+#include "assets/image.h"
+#include "assets/animation.h"
+#include "timer.h"
 
+#define PLAYER_ACCEL 10
+#define PLAYER_MAX_SPEED 230
+#define PLAYER_HEIGHT 43
+#define FORCE_UP 20
+#define GRAVITY 35
+#define MAX_STEP 24
+#define TERMINAL_VELOCITY 300
+#define TICK 1/35.f
 
-#define PLAYER_SPEED 5
+#define CAMERA_BOB_SPEED 10.f
+#define CAMERA_BOB_RANGE 5.f
+
 
 typedef struct _game_core
 {
@@ -19,69 +36,6 @@ typedef struct _game_core
 
 static game_core_t game_manager = {0};
 
-static void g_merge(queue_sector_t *queue, float *depth, int low, int high)
-{
-    float tmp[queue->size];
-    uint32_t tmp_id[queue->size];
-    memcpy(tmp, depth, queue->size * sizeof(float));
-    memcpy(tmp_id, queue->arr, queue->size * sizeof(uint32_t));
-
-    int pivot = (low + high) / 2;
-    int i1 = low, i2 = pivot + 1;
-    for (int curr = low; curr <= high; curr++)
-    {
-        if (i2 > high || tmp[i1] > tmp[i2])
-        {
-            depth[curr] = tmp[i1];
-            queue->arr[curr] = tmp_id[i1];
-            i1++;
-        }
-        else
-        {
-            depth[curr] = tmp[i2];
-            queue->arr[curr] = tmp_id[i2];
-            i2++;
-        }
-    }
-}
-
-static void g_merge_sort_aux(queue_sector_t *queue, float *depth, int low, int high)
-{
-    if (low < high)
-    {
-        int pivot = (low + high) / 2;
-
-        g_merge_sort_aux(queue, depth, low, pivot);
-        g_merge_sort_aux(queue, depth, pivot + 1, high);
-        g_merge(queue, depth, low, high);
-    }
-}
-
-static void g_merge_sort(queue_sector_t *queue, float *depth)
-{
-    g_merge_sort_aux(queue, depth, 0, queue->size - 1);
-}
-
-static void g_sort_sectors(sector_t *sectors, queue_sector_t *queue)
-{
-    float depth[queue->size];
-
-    for (uint32_t i = 0; i < queue->size; i++)
-    {
-        uint32_t id = queue->arr[i];
-        // Transformando as posições do mundo em relação ao player
-        vec2f_t u = { sectors[id].center.x - game_manager.player.position.x, sectors[id].center.y - game_manager.player.position.y };
-        u = (vec2f_t) {
-            .x = u.x * game_manager.player.angle_cos - u.y * game_manager.player.angle_sin,
-            .y = u.x * game_manager.player.angle_sin + u.y * game_manager.player.angle_cos,
-        };
-
-        depth[i] = sqrt(u.x * u.x + u.y * u.y);
-    }
-
-    g_merge_sort(queue, depth); 
-}
-
 bool g_init(uint16_t scrn_w, uint16_t scrn_h)
 {
     game_manager.scrnw = scrn_w;
@@ -91,7 +45,7 @@ bool g_init(uint16_t scrn_w, uint16_t scrn_h)
     game_manager.is_paused = false;
     game_manager.player = (player_t)
     {
-        .position = (vec3f_t){0, 0, 0},
+        .position = (vec3f_t){0, 0, -5},
         .angle = 0,
         .angle_cos = 1,
         .angle_sin = 0,
@@ -111,144 +65,149 @@ bool g_init(uint16_t scrn_w, uint16_t scrn_h)
 
 void g_run()
 {
-    wall_t walls[] = { 
-        // Setor 1 (Pentágono)
-        { .a = {0, 0}, .b = {10, 0}, .is_portal = false, .texture_id = 3 },
-        { .a = {10, 0}, .b = {12, 5}, .is_portal = false, .texture_id = 3 },
-        { .a = {12, 5}, .b = {5, 10}, .is_portal = false, .texture_id = 3 },
-        { .a = {5, 10}, .b = {-2, 5}, .is_portal = false, .texture_id = 3 },
-        { .a = {-2, 5}, .b = {0, 0}, .is_portal = false, .texture_id = 3 },
+    wad_reader_t wad_reader = wdr_open("resources/DOOM1.WAD");
+    bsp_t bsp = bsp_create(&wad_reader, "E1M1");
 
-        // Setor 2 (Triângulo)
-        { .a = {15, 5}, .b = {20, 5}, .is_portal = false, .texture_id = 1 },
-        { .a = {20, 5}, .b = {17, 10}, .is_portal = false, .texture_id = 1 },
-        { .a = {17, 10}, .b = {15, 5}, .is_portal = false, .texture_id = 1 },
-
-        // Setor 3 (Hexágono)
-        { .a = {10, 15}, .b = {15, 12}, .is_portal = false, .texture_id = 2 },
-        { .a = {15, 12}, .b = {20, 15}, .is_portal = false, .texture_id = 2 },
-        { .a = {20, 15}, .b = {20, 20}, .is_portal = false, .texture_id = 2 },
-        { .a = {20, 20}, .b = {15, 23}, .is_portal = false, .texture_id = 2 },
-        { .a = {15, 23}, .b = {10, 20}, .is_portal = false, .texture_id = 2 },
-        { .a = {10, 20}, .b = {10, 15}, .is_portal = false, .texture_id = 2 },
-
-    };
-
-    sector_t sectors[] = {
-        { 
-            .ceil_texture_id = 1,
-            .floor_texture_id = 1,
-            .first_wall_id = 0,       // Índice da primeira parede
-            .num_walls = 5,   // Número de paredes
-            .z_floor = 0.0f,
-            .z_ceil = 5.0f
-        },
-        { 
-            .ceil_texture_id = 2,
-            .floor_texture_id = 2,
-            .first_wall_id = 5,       // Índice da primeira parede
-            .num_walls = 3,   // Número de paredes
-            .z_floor = 0.0f,
-            .z_ceil = 5.0f
-        },
-        { 
-            .ceil_texture_id = 0,
-            .floor_texture_id = 0,
-            .first_wall_id = 8,       // Índice da primeira parede
-            .num_walls = 6,   // Número de paredes
-            .z_floor = 0.0f,
-            .z_ceil = 5.0f
-        },
-    };
-
-    uint32_t sectors_count = sizeof(sectors)/sizeof(sector_t);
-    for (uint32_t i = 0; i < sectors_count; i++)
+    typedef struct _mus
     {
-        for (uint32_t j = 0; j < sectors[i].num_walls; j++)
-        {
-            const wall_t *wall = &walls[sectors[i].first_wall_id + j];
-            sectors[i].center.x += (wall->a.x + wall->b.x) / 2.f;
-            sectors[i].center.y += (wall->a.y + wall->b.y) / 2.f;
-        }
+        char ID[4];
+        uint16_t len_song;
+        uint16_t offset_song;
+        uint16_t num_primary_channels;
+        uint16_t num_secondary_channels;
+        uint16_t num_instruments;
+        uint16_t reserved; // unused
+        uint16_t *instrument_patch_list;
+    } mus_t;
+    mus_t mus;
+    uint32_t mus_index;
+    if (fh_get_value(&wad_reader.file_hash, "D_E1M1", &mus_index))
+    {
+        wdr_get_lump_header(&wad_reader, &mus, mus_index, sizeof(mus_t) - sizeof(mus.instrument_patch_list));
 
-        sectors[i].center.x /= sectors[i].num_walls;
-        sectors[i].center.y /= sectors[i].num_walls;
+        DOOM_LOG_DEBUG("%.4s, %d, %d, %d, %d, %d", mus.ID, mus.len_song, mus.offset_song, mus.num_primary_channels, mus.num_secondary_channels,
+        mus.num_instruments);
     }
 
-    queue_sector_t queue = {
-        .arr = { 0, 1, 2 },  // Adiciona o ID do setor
-        .size = 3,                    // Apenas 1 elemento na fila
-        .front = 0,
-    };
+    a_init(&wad_reader);
     
-    texture_t textures[] = {
-        { .width = 1, .height = 1, .data.color = 0xFF0000FF},
-        { .width = 1, .height = 1, .data.color = 0xFF00FF00},
-        { .width = 1, .height = 1, .data.color = 0xFFFF0000},
-        r_create_texture("resources/textures/wall_texture_argb.bmp", 8, 8)
-    };
+    wdr_close(&wad_reader);
+
+    vec3f_t spawn = bsp_get_player_spawn(&bsp);
+    game_manager.player.position.x = spawn.x;
+    game_manager.player.position.y = spawn.y;
+    game_manager.player.position.z = spawn.z + PLAYER_HEIGHT;
+    game_manager.player.angle = (bsp.entities[0].angle * PI) / 180.f;
 
     const uint8_t* keystate = SDL_GetKeyboardState(NULL);
-    uint64_t last = SDL_GetPerformanceCounter(), now = 0;
     float sense = 0.2f;
 
     bool esc_pressed = false;
+    animation_t pistol_anim = anm_create_animation(8, 6, false, PISTOL);
+    int16_t last_ground_height = 0;
+
+    t_start();
     while (game_manager.is_running && w_handle_events()) 
     {
-        now = SDL_GetPerformanceCounter();
-        double deltaTime = (double)((now - last) * 1000 / (double)SDL_GetPerformanceFrequency()) * 0.001;
-        last = now;
-        
+        t_update();
+        double delta_time = t_get_delta_time();
+
         if(keystate[SDL_SCANCODE_ESCAPE]) 
         {
             if (!esc_pressed)
-                game_manager.is_paused = !game_manager.is_paused;
+            game_manager.is_paused = !game_manager.is_paused;
             esc_pressed = true;
         }
         else
-            esc_pressed = false;
-
+        esc_pressed = false;
+        
         if (!game_manager.is_paused)
         {
             int mouse_x = 0;
             SDL_GetMouseState(&mouse_x, NULL);
             SDL_WarpMouseInWindow((SDL_Window*)w_get_handler(), game_manager.scrnw / 2, game_manager.scrnh / 2);
             float mouse_dx = mouse_x - game_manager.scrnw / 2;
-            game_manager.player.angle += mouse_dx * deltaTime * sense;
+            game_manager.player.angle -= mouse_dx * delta_time * sense;
                 
             // Corrige valores negativos
             if (game_manager.player.angle < 0)
                 game_manager.player.angle += 2 * PI;
             else if (game_manager.player.angle >= 2 * PI)
                 game_manager.player.angle -= 2 * PI;
-    
-            game_manager.player.angle_cos = cos(game_manager.player.angle);
-            game_manager.player.angle_sin = sin(game_manager.player.angle);
-            
-            float dx = game_manager.player.angle_sin * PLAYER_SPEED;
-            float dy = game_manager.player.angle_cos * PLAYER_SPEED;
-            vec3f_t current_pos = game_manager.player.position;
+
             vec2f_t dir = {0};
-            if(keystate[SDL_SCANCODE_W]) dir = (vec2f_t){dx, dy};
-            if(keystate[SDL_SCANCODE_S]) dir = (vec2f_t){-dx, -dy};
-            if(keystate[SDL_SCANCODE_A]) dir = (vec2f_t){-dy, dx};
-            if(keystate[SDL_SCANCODE_D]) dir = (vec2f_t){dy, -dx};
-            if(keystate[SDL_SCANCODE_Z]) current_pos.z -= PLAYER_SPEED * deltaTime;
-            if(keystate[SDL_SCANCODE_C]) current_pos.z += PLAYER_SPEED * deltaTime;
+            if(keystate[SDL_SCANCODE_W]) dir = u_rotate_vec2f((vec2f_t){1, 0}, game_manager.player.angle);
+            if(keystate[SDL_SCANCODE_S]) dir = u_rotate_vec2f((vec2f_t){-1, 0}, game_manager.player.angle);
+            if(keystate[SDL_SCANCODE_A]) dir = u_rotate_vec2f((vec2f_t){0, 1}, game_manager.player.angle);
+            if(keystate[SDL_SCANCODE_D]) dir = u_rotate_vec2f((vec2f_t){0, -1}, game_manager.player.angle);
+            if (!pistol_anim.is_playing && (SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0) pistol_anim.is_playing = true;
             
-            game_manager.player.position = (vec3f_t) { current_pos.x + dir.x * deltaTime, current_pos.y + dir.y * deltaTime, current_pos.z };
-    
-            g_sort_sectors(sectors, &queue);
-    
-            r_begin_draw(&game_manager.player, textures);
-    
-            r_draw_sectors(sectors, walls, &queue);
+            vec2f_t desired_velocity = { dir.x * PLAYER_MAX_SPEED, dir.y * PLAYER_MAX_SPEED };
+            game_manager.player.velocity.x += (desired_velocity.x - game_manager.player.velocity.x) * delta_time * PLAYER_ACCEL;
+            game_manager.player.velocity.y += (desired_velocity.y - game_manager.player.velocity.y) * delta_time * PLAYER_ACCEL;
 
-            // r_draw_floor();
+            vec2f_t dir_2 = u_normalize_vec2f((vec2f_t){game_manager.player.velocity.x, game_manager.player.velocity.y });
+            
+            if (u_magnitude_vec(game_manager.player.velocity.x, game_manager.player.velocity.y, 0) >= PLAYER_MAX_SPEED)
+            {
+                game_manager.player.velocity.x = dir_2.x * PLAYER_MAX_SPEED;
+                game_manager.player.velocity.y = dir_2.y * PLAYER_MAX_SPEED;
+            }
 
+            game_manager.player.position.x += game_manager.player.velocity.x * delta_time;
+            game_manager.player.position.y += game_manager.player.velocity.y * delta_time;
+    
+            // Atualiza para obter a altura do subsetor
+            bsp_update(&bsp, game_manager.player.position, game_manager.player.angle);
+            int16_t new_ground_height = bsp_get_sub_sector_height(&bsp);
+            float delta_z = new_ground_height + PLAYER_HEIGHT - game_manager.player.position.z;
+            if (delta_z > 0)
+            {
+                if (new_ground_height - last_ground_height <= MAX_STEP)
+                {
+                    game_manager.player.position.z += delta_z > 0.1 ? delta_z * delta_time * FORCE_UP
+                                                                                :
+                                                                              delta_z;
+                    last_ground_height = new_ground_height;
+                }
+            }
+            else if(delta_z < -0.1f)
+            {
+                game_manager.player.velocity.z += GRAVITY * delta_time;
+                if (game_manager.player.velocity.z < TERMINAL_VELOCITY)
+                    game_manager.player.velocity.z = TERMINAL_VELOCITY;
+                
+                game_manager.player.position.z -= game_manager.player.velocity.z * delta_time;
+                last_ground_height = new_ground_height;
+            }
+            else
+            {
+                game_manager.player.position.z -= delta_z;
+                game_manager.player.velocity.z = 0;
+                last_ground_height = new_ground_height;
+            }
+            
+            anm_update(&pistol_anim);
+            
+            r_begin_draw(&game_manager.player);
+
+            float normalized_velocity = (u_magnitude_vec(game_manager.player.velocity.x, game_manager.player.velocity.y, 0)) / PLAYER_MAX_SPEED;
+            float bob_y = (cos(t_get_time() * CAMERA_BOB_SPEED)) * CAMERA_BOB_RANGE * normalized_velocity;
+
+            vec3f_t tmp = game_manager.player.position;
+            tmp.z += bob_y;
+            // Atualiza novamente para renderizar com a nova altura + bob_y
+            bsp_update(&bsp, tmp, game_manager.player.angle);
+
+            bsp_render(&bsp);
+            bsp_render_sprites(&bsp);
+            anm_render(&pistol_anim, normalized_velocity);
             r_end_draw();
         }
     }
+
+    bsp_delete(&bsp);
+    a_shutdown();
 }
 
 void g_shutdown()

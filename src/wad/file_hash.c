@@ -50,7 +50,7 @@ bool fh_get_value(file_hash_t *file_hash, const char *key, uint32_t *value)
     {
         uint32_t id = (index + i) % file_hash->capacity;
         if (!file_hash->buckets[id].has_value) break;
-        else if (strcmp(key, file_hash->buckets[id].key) == 0)
+        else if (strncmp(key, file_hash->buckets[id].key, 8) == 0)
         {
             if (value != NULL)
                 *value = file_hash->buckets[id].value;
