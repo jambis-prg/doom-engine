@@ -47,11 +47,14 @@ bool g_init(uint16_t scrn_w, uint16_t scrn_h)
     {
         .position = (vec3f_t){0, 0, -5},
         .angle = 0,
-        .angle_cos = 1,
-        .angle_sin = 0,
         .sector_id = 0,
+        .health = 100,
+        .armor = 0,
+        .bullet_count = {1, 50, 2, 0},
+        .killed_enemies_count = 0,
+        .weapon_index = 2,
+        .weapon_type = {FIST, PISTOL, SHOTGUN, NONE}, // TODO: substituir SHOTGUN por NONE
         .velocity = (vec3f_t){ 0, 0, 0},
-        .yaw = 0
     };
     
     if (!w_init(scrn_w, scrn_h))
@@ -103,7 +106,7 @@ void g_run()
     float sense = 0.2f;
 
     bool esc_pressed = false;
-    animation_t pistol_anim = anm_create_animation(8, 6, false, PISTOL);
+    animation_t pistol_anim = anm_create_animation(SHOTGUN_INDEX, SHOTGUN_COUNT, false, SHOTGUN);
     int16_t last_ground_height = 0;
 
     t_start();
@@ -119,7 +122,7 @@ void g_run()
             esc_pressed = true;
         }
         else
-        esc_pressed = false;
+            esc_pressed = false;
         
         if (!game_manager.is_paused)
         {
@@ -136,12 +139,40 @@ void g_run()
                 game_manager.player.angle -= 2 * PI;
 
             vec2f_t dir = {0};
-            if(keystate[SDL_SCANCODE_W]) dir = u_rotate_vec2f((vec2f_t){1, 0}, game_manager.player.angle);
-            if(keystate[SDL_SCANCODE_S]) dir = u_rotate_vec2f((vec2f_t){-1, 0}, game_manager.player.angle);
-            if(keystate[SDL_SCANCODE_A]) dir = u_rotate_vec2f((vec2f_t){0, 1}, game_manager.player.angle);
-            if(keystate[SDL_SCANCODE_D]) dir = u_rotate_vec2f((vec2f_t){0, -1}, game_manager.player.angle);
-            if (!pistol_anim.is_playing && (SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0) pistol_anim.is_playing = true;
-            
+            if (keystate[SDL_SCANCODE_W]) dir = u_rotate_vec2f((vec2f_t){1, 0}, game_manager.player.angle);
+            if (keystate[SDL_SCANCODE_S]) dir = u_rotate_vec2f((vec2f_t){-1, 0}, game_manager.player.angle);
+            if (keystate[SDL_SCANCODE_A]) dir = u_rotate_vec2f((vec2f_t){0, 1}, game_manager.player.angle);
+            if (keystate[SDL_SCANCODE_D]) dir = u_rotate_vec2f((vec2f_t){0, -1}, game_manager.player.angle);
+            if (!pistol_anim.is_playing) // Troca a arma selecionada
+            {
+                if (keystate[SDL_SCANCODE_1])
+                {
+                    game_manager.player.weapon_index = 0;
+                    pistol_anim = anm_create_animation(FIST_INDEX, FIST_COUNT, false, FIST);
+                }
+                if (keystate[SDL_SCANCODE_2] && game_manager.player.weapon_type[1] != NONE && game_manager.player.bullet_count[1] != 0)
+                {
+                    game_manager.player.weapon_index = 1;
+                    pistol_anim = anm_create_animation(PISTOL_INDEX, PISTOL_COUNT, false, PISTOL);
+                }
+                if (keystate[SDL_SCANCODE_3] && game_manager.player.weapon_type[2] != NONE && game_manager.player.bullet_count[2] != 0)
+                {
+                    game_manager.player.weapon_index = 2;
+                    pistol_anim = anm_create_animation(SHOTGUN_INDEX, SHOTGUN_COUNT, false, SHOTGUN);
+                }
+                if (keystate[SDL_SCANCODE_4] && game_manager.player.weapon_type[3] != NONE && game_manager.player.bullet_count[3] != 0)
+                {
+                    // game_manager.player.weapon_index = 3;
+                    // pistol_anim = anm_create_animation([], [], false, game_manager.player.weapon_type[3]); Trocar o colchete pela função que associa as armas
+                }
+            }
+            if (!pistol_anim.is_playing && (SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0 && game_manager.player.bullet_count[game_manager.player.weapon_index] > 0)
+            {
+                pistol_anim.is_playing = true;
+                if (game_manager.player.weapon_index != 0)
+                    game_manager.player.bullet_count[game_manager.player.weapon_index]--; // Decrementa a bala
+            }
+
             vec2f_t desired_velocity = { dir.x * PLAYER_MAX_SPEED, dir.y * PLAYER_MAX_SPEED };
             game_manager.player.velocity.x += (desired_velocity.x - game_manager.player.velocity.x) * delta_time * PLAYER_ACCEL;
             game_manager.player.velocity.y += (desired_velocity.y - game_manager.player.velocity.y) * delta_time * PLAYER_ACCEL;
@@ -202,6 +233,14 @@ void g_run()
             bsp_render(&bsp);
             bsp_render_sprites(&bsp);
             anm_render(&pistol_anim, normalized_velocity);
+
+            // Troca para a mão quando acaba a bala
+            if (game_manager.player.weapon_index != 0 && game_manager.player.bullet_count[game_manager.player.weapon_index] == 0 && !pistol_anim.is_playing)
+            {
+                game_manager.player.weapon_index = 0;
+                pistol_anim = anm_create_animation(FIST_INDEX, FIST_COUNT, false, FIST);
+            }
+
             r_end_draw();
         }
     }

@@ -6,6 +6,15 @@
 #define BOB_SPEED 5.f
 #define BOB_RANGE 12.f
 
+#define FIST_COUNT 6
+#define FIST_INDEX 70
+
+#define SHOTGUN_COUNT 6
+#define SHOTGUN_INDEX 85
+
+#define PISTOL_COUNT 6
+#define PISTOL_INDEX 8
+
 typedef enum _gun_type { NONE, FIST, CHAINSAW, PISTOL, SHOTGUN, CHAINGUN, ROCKET, PLASMA, BFG, SUPER_SHT } gun_type_t;
 
 typedef struct _animation
