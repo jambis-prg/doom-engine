@@ -36,7 +36,7 @@ void r_begin_draw(const player_t *player);
 
 void r_draw_pixel(int x, int y, uint32_t color);
 void r_draw_vertical_line(int16_t x, int16_t y1, int16_t y2, const char *wall_texture, int16_t light_level, uint32_t color);
-void r_draw_wall_col(const char *texture_name, float texture_column, int16_t x, int16_t y1, int16_t y2, float texture_alt, float inv_scale, int16_t light_level);
+void r_draw_wall_col(const char *texture_name, float texture_column, int16_t x, int16_t y1, int16_t y2, float texture_alt, float inv_scale, int16_t light_level, float depth);
 void r_draw_flat(const char *texture_name, int16_t x, int16_t y1, int16_t y2, float world_z, int16_t light_level);
 void r_draw_portal_wall_range(portal_wall_desc_t *portal_wall_desc);
 void r_draw_solid_wall_range(solid_wall_desc_t *solid_wall_desc);

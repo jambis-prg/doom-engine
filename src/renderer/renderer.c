@@ -37,7 +37,8 @@ static rederer_t renderer = {
     .screen_dist = 0,
     .x_to_angle = NULL,
     .upper_clip = NULL,
-    .lower_clip = NULL
+    .lower_clip = NULL,
+    .depth_buffer = NULL,
 };
 
 float max_depth = 0.f;
@@ -99,7 +100,7 @@ static bool r_create_tables()
         return false;
     }
 
-    renderer.depth_buffer = (float*)malloc(WIDTH * sizeof(float));
+    renderer.depth_buffer = (float*)malloc(WIDTH * HEIGHT * sizeof(float));
 
     if (renderer.depth_buffer == NULL)
     {
@@ -108,7 +109,7 @@ static bool r_create_tables()
         free(renderer.lower_clip);
         return false;
     }
-    
+
     for (uint32_t i = 0; i <= WIDTH; i++)
         renderer.x_to_angle[i] = atanf(((H_WIDTH) - i) / renderer.screen_dist);
 
@@ -145,17 +146,20 @@ bool r_init(uint16_t scrn_w, uint16_t scrn_h)
 
 void r_begin_draw(const player_t *player)
 {
-    memset(renderer.screen_buffer, 0, renderer.screen_buffer_size);
-    memset(renderer.upper_clip, -1, WIDTH * sizeof(int16_t));
+    for (uint32_t i = 0; i < WIDTH * HEIGHT; i++)
+    {
+        renderer.screen_buffer[i] = 0;
+        renderer.depth_buffer[i] = FLT_MAX;
+    }
+
     min_depth = FLT_MAX;
     max_depth = 0.f;
+    
     for (uint16_t i = 0; i < WIDTH; i++) 
-        renderer.depth_buffer[i] = FLT_MAX;
-    // Não pode ser memset pois memset seta byte a byte
-    // como 240 = 0xF0 ele preeeche [0xF0F0] o que faz
-    // o lower ficar negativo
-    for (uint16_t i = 0; i < WIDTH; i++) 
+    {
+        renderer.upper_clip[i] = -1;
         renderer.lower_clip[i] = HEIGHT;
+    }
 
     renderer.camera_pos = (vec3f_t){ player->position.x, player->position.y, player->position.z };
     renderer.camera_angle = player->angle;
@@ -177,7 +181,7 @@ void r_draw_vertical_line(int16_t x, int16_t y1, int16_t y2, const char *wall_te
         renderer.screen_buffer[WIDTH * i + x] = color; 
 }
 
-void r_draw_wall_col(const char *texture_name, float texture_column, int16_t x, int16_t y1, int16_t y2, float texture_alt, float inv_scale, int16_t light_level)
+void r_draw_wall_col(const char *texture_name, float texture_column, int16_t x, int16_t y1, int16_t y2, float texture_alt, float inv_scale, int16_t light_level, float depth)
 {
     image_t *texture = a_get_texture_by_name(texture_name);
     if (texture != NULL && y1 < y2)
@@ -187,8 +191,13 @@ void r_draw_wall_col(const char *texture_name, float texture_column, int16_t x, 
 
         for (uint16_t y = y1; y <= y2; y++)
         {
+            uint32_t i = WIDTH * y + x;
+            if (depth < renderer.depth_buffer[i])
+                renderer.depth_buffer[i] = depth;
+
+
             uint32_t color = texture->data[((int16_t)tex_y % texture->height) * texture->width + col];
-            renderer.screen_buffer[WIDTH * y + x] = color;
+            renderer.screen_buffer[i] = color;
             tex_y += inv_scale;
         }
     }
@@ -199,7 +208,7 @@ void r_draw_flat(const char *texture_name, int16_t x, int16_t y1, int16_t y2, fl
     if (strcmp(texture_name, "F_SKY1") == 0)
     {
         float tex_column = 2.2f * (renderer.camera_angle + renderer.x_to_angle[x]);
-        r_draw_wall_col("SKY1", tex_column, x, y1, y2, 100.f, 1.5f, 1);
+        r_draw_wall_col("SKY1", tex_column, x, y1, y2, 100.f, 1.5f, 1, FLT_MAX);
         return;
     }
 
@@ -269,6 +278,8 @@ void r_draw_portal_wall_range(portal_wall_desc_t *portal_wall_desc)
     float angle, texture_column, inv_scale;
     for (int16_t x = portal_wall_desc->x1; x < portal_wall_desc->x2; x++)
     {
+        float depth = portal_wall_desc->rw_distance / cosf(portal_wall_desc->rw_normal_angle - renderer.x_to_angle[x] - renderer.camera_angle);
+
         float draw_wall_y1 = wall_y1 - 1;
 
         if (portal_wall_desc->draw_upper_wall || portal_wall_desc->draw_lower_wall)
@@ -291,7 +302,7 @@ void r_draw_portal_wall_range(portal_wall_desc_t *portal_wall_desc)
 
             int16_t wy1 = (int16_t)(fmax(draw_upper_wall_y1, renderer.upper_clip[x] + 1));
             int16_t wy2 = (int16_t)(fmin(portal_y1, renderer.lower_clip[x] - 1));
-            r_draw_wall_col(portal_wall_desc->upper_wall_texture, texture_column, x, wy1, wy2, portal_wall_desc->upper_tex_alt, inv_scale, portal_wall_desc->light_level);
+            r_draw_wall_col(portal_wall_desc->upper_wall_texture, texture_column, x, wy1, wy2, portal_wall_desc->upper_tex_alt, inv_scale, portal_wall_desc->light_level, depth);
 
             if (renderer.upper_clip[x] < wy2)
                 renderer.upper_clip[x] = wy2;
@@ -323,7 +334,7 @@ void r_draw_portal_wall_range(portal_wall_desc_t *portal_wall_desc)
 
             int16_t wy1 = (int16_t)(fmax(draw_lower_wall_y1, renderer.upper_clip[x] + 1));
             int16_t wy2 = (int16_t)(fmin(wall_y2, renderer.lower_clip[x] - 1));
-            r_draw_wall_col(portal_wall_desc->lower_wall_texture, texture_column, x, wy1, wy2, portal_wall_desc->lower_tex_alt, inv_scale, portal_wall_desc->light_level);
+            r_draw_wall_col(portal_wall_desc->lower_wall_texture, texture_column, x, wy1, wy2, portal_wall_desc->lower_tex_alt, inv_scale, portal_wall_desc->light_level, depth);
             
             if (renderer.lower_clip[x] > wy1)
                 renderer.lower_clip[x] = wy1;
@@ -367,12 +378,6 @@ void r_draw_solid_wall_range(solid_wall_desc_t *solid_wall_desc)
     for (int16_t x = solid_wall_desc->x1; x <= solid_wall_desc->x2; x++)
     {
         float depth = solid_wall_desc->rw_distance / cosf(solid_wall_desc->rw_normal_angle - renderer.x_to_angle[x] - renderer.camera_angle);
-        if (depth > 0 && depth < renderer.depth_buffer[x])
-        {
-            renderer.depth_buffer[x] = depth;
-            if (depth > max_depth) max_depth = depth;
-            if (depth < min_depth) min_depth = depth;
-        }
 
         float draw_wall_y1 = wall_y1 - 1;
 
@@ -398,7 +403,8 @@ void r_draw_solid_wall_range(solid_wall_desc_t *solid_wall_desc)
                     x, wy1, wy2, 
                     solid_wall_desc->middle_texture_alt, 
                     inv_scale,
-                    solid_wall_desc->light_level
+                    solid_wall_desc->light_level,
+                    depth
                 );
             }
         }
@@ -427,45 +433,25 @@ void r_draw_sprite(int16_t x, int16_t z, image_t *sprite, float rw_scale, float 
 
     for (int16_t x = 0; x < sprite_screen_width; x++) 
     {
-        if (rw_distance > renderer.depth_buffer[(int16_t)(x  + x_offset)]) 
-                continue;
-        // int16_t y_min = fmax(renderer.upper_clip[(int16_t)(x + x_offset)], y_offset);
-        // int16_t y_max = fmin(renderer.lower_clip[(int16_t)(x + x_offset)], sprite_screen_height + y_offset);
-        // for (int16_t y = y_min - y_offset; y < (y_max - y_offset) ; y++) 
         for (int16_t y = 0; y < sprite_screen_height; y++)
         {
+            uint32_t i = (uint32_t)(y_offset + y) * WIDTH + (uint32_t)(x_offset + x);
+            if (rw_distance > renderer.depth_buffer[i])
+                continue;
+
             // Mapeia para o espaço do sprite original
             int16_t tex_x = (x * sprite->width) / sprite_screen_width;
             int16_t tex_y = (y * sprite->height) / sprite_screen_height;
 
             uint32_t color = sprite->data[tex_y * sprite->width + tex_x];
             if (color != 0x00)
-                renderer.screen_buffer[(int16_t)(y_offset + y) * WIDTH + (int16_t)(x_offset + x)] = color;
+                renderer.screen_buffer[i] = color;
         }
-
-        float color_factor = (rw_distance - min_depth) / (max_depth - min_depth);
-        uint32_t r = 255 * color_factor;
-        uint32_t g = 255 * color_factor;
-        uint32_t b = 255 * color_factor;
-
-        uint32_t depth_color = b << 16 | g << 8 | r;
-        renderer.screen_buffer[(int16_t)(H_HEIGHT + 1) * WIDTH + (int16_t)(x + x_offset)] = (0xFF << 24) | depth_color;
     }
 }
 
 void r_end_draw()
 {
-    for (uint32_t i = 0; i < WIDTH; i++)
-    {
-        float color_factor = (renderer.depth_buffer[i] - min_depth) / (max_depth - min_depth);
-        uint8_t r = 255 * color_factor;
-        uint8_t g = 255 * color_factor;
-        uint8_t b = 255 * color_factor;
-
-        uint32_t depth_color = b << 16 | g << 8 | r;
-        renderer.screen_buffer[(int16_t)H_HEIGHT * WIDTH + i] = (0xFF << 24) | depth_color;
-    }
-
     SDL_UpdateTexture(renderer.screen_texture, NULL, renderer.screen_buffer, WIDTH * sizeof(uint32_t));
     SDL_RenderCopy(renderer.handler, renderer.screen_texture, NULL, NULL);
     SDL_RenderPresent(renderer.handler);
@@ -508,6 +494,7 @@ void r_shutdown()
         free(renderer.x_to_angle);
         free(renderer.upper_clip);
         free(renderer.lower_clip);
+        free(renderer.depth_buffer);
         SDL_DestroyRenderer(renderer.handler);
     }
 }
