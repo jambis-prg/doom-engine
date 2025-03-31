@@ -30,6 +30,11 @@ static int16_t anm_get_gun_frame_idx(uint16_t current_frame, gun_type_t type)
             switch(current_frame)
             {
                 case 0: return 0;
+                case 1: return 1;
+                case 2: return 2;
+                case 3: return 3;
+                case 4: return 2;
+                case 5: return 1;
                 default: return -1;
             }
         case CHAINSAW:
@@ -143,6 +148,7 @@ static int16_t anm_get_gun_effect_idx(uint16_t current_frame, gun_type_t type)
             }
         case NONE:
         case FIST:
+            return -1;
         case CHAINSAW:
         case CHAINGUN:
         case ROCKET:

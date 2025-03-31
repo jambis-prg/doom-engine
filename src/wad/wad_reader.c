@@ -157,6 +157,7 @@ patch_colum_t *wdr_get_patch_columns(const wad_reader_t *wad_reader, const patch
             }
             else
             {
+                column->data = NULL;
                 offset++;
                 size++;
                 break;
@@ -171,6 +172,8 @@ patch_colum_t *wdr_get_patch_columns(const wad_reader_t *wad_reader, const patch
         patch_columns = NULL;
         size = 0;
     }
+    else
+        patch_columns = tmp;
 
     *size_out = size;
     return patch_columns;
@@ -179,7 +182,7 @@ patch_colum_t *wdr_get_patch_columns(const wad_reader_t *wad_reader, const patch
 void wdr_delete_patch_columns(patch_colum_t *patch_columns, uint32_t size)
 {
     for (uint32_t i = 0; i < size; i++)
-        if (patch_columns[i].top_delta != 0xFF)
+        if (patch_columns[i].data != NULL)
             free(patch_columns[i].data);
     free(patch_columns);
 }

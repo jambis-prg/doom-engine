@@ -48,6 +48,8 @@ bool w_handle_events()
 
 void w_shutdown()
 {
+    SDL_DestroyWindow(window);
+    SDL_Quit();
 }
 
 void *w_get_handler()

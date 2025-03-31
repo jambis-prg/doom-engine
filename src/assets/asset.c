@@ -4,6 +4,8 @@
 #include <ctype.h>
 #include "core/timer.h"
 
+// index base 553 
+
 // Entities Types
 #define SHOTGUN_ENTITY_TYPE 2001
 
@@ -206,34 +208,42 @@ image_t *a_load_patchs(const char *patch_lump_name, uint32_t *count)
         uint32_t patch_size = 0;
         char *patch_names = (char *)wdr_get_lump_data(asset_manager.wdr, patch_index, 4, &patch_size);
         *count = patch_size / 8;
-        patchs = (image_t *)malloc(*count * sizeof(image_t));
-
-        if (patchs != NULL)
+        if (patch_names != NULL)
         {
-            for (uint32_t i = 0, j = 0; i < patch_size; i += 8, j++)
+            patchs = (image_t *)malloc(*count * sizeof(image_t));
+
+            if (patchs != NULL)
             {
-                char name[8];
-                memset(name, 0, sizeof(name));
-                strncpy(name, patch_names + i, 8);
-                for (uint8_t i = 0; i < 8; i++)
-                    name[i] = toupper(name[i]);
-                uint32_t size = 0;
-                uint16_t width, height;
-                int16_t left_offset, top_offset;
-                patch_colum_t *patch_columns = a_load_patch_columns(name, &size, &width, &height, &left_offset, &top_offset);
-    
-                if (patch_columns != NULL)
+                for (uint32_t i = 0, j = 0; i < patch_size; i += 8, j++)
                 {
-                    patchs[j] = i_create_image(
-                        patch_columns, size, 
-                        width, height, 
-                        left_offset, top_offset
-                    );
-                    wdr_delete_patch_columns(patch_columns, size);
+                    char name[8];
+                    memset(name, 0, sizeof(name));
+                    strncpy(name, patch_names + i, 8);
+                    for (uint8_t i = 0; i < 8; i++)
+                        name[i] = toupper(name[i]);
+                    uint32_t size = 0;
+                    uint16_t width, height;
+                    int16_t left_offset, top_offset;
+                    patch_colum_t *patch_columns = a_load_patch_columns(name, &size, &width, &height, &left_offset, &top_offset);
+        
+                    if (patch_columns != NULL)
+                    {
+                        patchs[j] = i_create_image(
+                            patch_columns, size, 
+                            width, height, 
+                            left_offset, top_offset
+                        );
+                        wdr_delete_patch_columns(patch_columns, size);
+                    }
+                    else
+                    {
+                        patchs[j] = (image_t){ .data = NULL };
+                        DOOM_LOG_DEBUG("%d - Nao foi possivel carregar o patch %s", j, name);
+                    }
                 }
-                else
-                    DOOM_LOG_DEBUG("%d - Nao foi possivel carregar o patch %s", j, name);
             }
+
+            free(patch_names);
         }
     }
 
