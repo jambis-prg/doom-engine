@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Isrc -Wall -Wextra -O2 -DNDEBUG
 CFLAGS_DEBUG := -Isrc -Wall -Wextra -g -D_DEBUG
-LDFLAGS = -lSDL2 -lm
+LDFLAGS = -lSDL2 -lm -Wl,--dynamic-linker=/opt/glibc-2.35/lib/ld-2.35.so -L/opt/glibc-2.35/lib -I/opt/glibc-2.35/include
 SRC := $(shell find src -type f -name '*.c')
 
 OBJ_DIR_DEBUG := bin/obj/debug

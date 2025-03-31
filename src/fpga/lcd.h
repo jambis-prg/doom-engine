@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LCD_H_INCLUDED
+#define LCD_H_INCLUDED
 
 #include <stdint.h>
 
@@ -51,3 +52,5 @@ void lcd_set_cursor(int line, int position);
 void lcd_char(char val); 
 
 void lcd_string(const char *s);
+
+#endif

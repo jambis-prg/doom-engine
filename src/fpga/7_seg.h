@@ -1,5 +1,5 @@
-#ifndef SEVEN_SEG
-#define SEVEN_SEG
+#ifndef SEVEN_SEG_H_INCLUDED
+#define SEVEN_SEG_H_INCLUDED
 
 
 void seg7_init(int fd);

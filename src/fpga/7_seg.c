@@ -1,6 +1,6 @@
 #include "7_seg.h"
 #include "ioctl_cmds.h"
-#include <cstdint>
+#include <stdint.h>
 #include <fcntl.h> /* open() */
 #include <stdint.h>
 #include <stdio.h>

@@ -13,6 +13,7 @@
 #include "assets/image.h"
 #include "assets/animation.h"
 #include "timer.h"
+#include "fpga/device.h"
 
 #define PLAYER_ACCEL 10
 #define PLAYER_MAX_SPEED 230
@@ -62,6 +63,8 @@ bool g_init(uint16_t scrn_w, uint16_t scrn_h)
 
     if (!r_init(scrn_w / 4, scrn_h / 4))
         return false;
+
+    d_init();
 
     return true;
 }
@@ -115,7 +118,7 @@ void g_run()
         t_update();
         double delta_time = t_get_delta_time();
 
-        if(keystate[SDL_SCANCODE_ESCAPE]) 
+        if(keystate[SDL_SCANCODE_ESCAPE] || (d_switch_read() & 0x01) != 0) 
         {
             if (!esc_pressed)
             game_manager.is_paused = !game_manager.is_paused;
@@ -251,6 +254,7 @@ void g_run()
 
 void g_shutdown()
 {
+    d_shutdown();
     r_shutdown();
     w_shutdown();
 }
